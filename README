@@ -1,3 +1,19 @@
+Forked from https://github/phacility/phabricator.git to provide RPM packaging
+for RHEL/Centos 6.
+
+Howto build:
+* yum install rpm-build git
+* git clone https://github/vinzent/phabricator.git
+* cd phabricator
+* rpmbuild -bb resources/rhel/phabricator.spec
+
+3 RPM's are built:
+* phabricator: webapps
+* phabricator-arcanist: "arc" tool
+* phabricator-libphutil: libphutil php lib
+
+Original README:
+
 Phabricator is an open source collection of web applications which help
 software companies build better software.
 
