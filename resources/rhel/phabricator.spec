@@ -104,7 +104,12 @@ cp phabricator/resources/rhel/phabricator.init \
 
 mkdir -p ${RPM_BUILD_ROOT}/var/log/phabricator
 
-ln -sf /usr/libexec/git-core/git-http-backend ${DEST}/phabricator/support/bin/git-http-backend
+ln -sf /usr/libexec/git-core/git-http-backend \
+  ${DEST}/phabricator/support/bin/git-http-backend
+
+mkdir -p ${RPM_BUILD_ROOT}/etc/sudoers.d
+cp phabricator/resources/rhel/phabricator.sudoers \
+  ${RPM_BUILD_ROOT}/etc/sudoers.d/phabricator
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -127,6 +132,11 @@ if ! [ -e /opt/phacility/phabricator/conf/local/local.json ]; then
   $CFG set phd.user phabricator
   $CFG set phd.log-directory /var/log/phabricator
   $CFG set phd.pid-directory /var/run/phabricator
+  $CFG set diffusion.allow-http-auth true
+  $CFG set phabricator.csrf-key \
+    $(dd if=/dev/urandom bs=128 count=1 2>/dev/null |  base64 | egrep -o '[a-zA-Z0-9]' | head -30 | tr -d '\n')
+  $CFG set phabricator.mail-key \
+    $(dd if=/dev/urandom bs=128 count=1 2>/dev/null |  base64 | egrep -o '[a-zA-Z0-9]' | head -30 | tr -d '\n')
 fi
 
 /sbin/chkconfig --add phabricator
@@ -143,6 +153,7 @@ fi
 %defattr(-,root,root,-)
 /opt/phacility/phabricator
 %attr(0755,-,-) %{_initddir}/phabricator
+%attr(0440,-,-) /etc/sudoers.d/phabricator
 %dir %attr(0750, phabricator, phabricator)/var/lib/phabricator
 %dir %attr(2750, phabricator, phabricator) /var/lib/phabricator/repo
 %dir %attr(0700, apache, apache) /var/lib/phabricator/files
