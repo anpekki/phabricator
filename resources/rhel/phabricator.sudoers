@@ -1,0 +1,7 @@
+Defaults:apache    !requiretty
+apache ALL=(phabricator) SETENV: NOPASSWD: /usr/libexec/git-core/git-http-backend, /usr/bin/hg
+
+# ssh hosting not available on rhel6. requires OpenSSH 6.2
+# Defaults:vcs-user    !requiretty
+# vcs-user ALL=(daemon-user) SETENV: NOPASSWD: /path/to/bin/git-upload-pack, /path/to/bin/git-receive-pack, /path/to/bin/hg, /path/to/bin/svnserve
+
