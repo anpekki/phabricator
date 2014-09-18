@@ -12,7 +12,7 @@ License:        Apache 2.0
 URL:            http://www.phabricator.org
 Source0:        https://github.com/phacility/libphutil.git
 Source1:        https://github.com/phacility/arcanist.git
-Source2:        https://github.com/phacility/phabricator.git
+Source2:        https://github.com/vinzent/phabricator.git
 
 BuildRequires:  git
 BuildArch:      noarch
@@ -75,7 +75,7 @@ fi
 
 if [[ ! -e phabricator ]]
 then
-  git clone https://github.com/phacility/phabricator.git
+  git clone https://github.com/vinzent/phabricator.git
 else
   (cd phabricator && git pull --rebase)
 fi
@@ -103,6 +103,8 @@ cp phabricator/resources/rhel/phabricator.init \
   ${RPM_BUILD_ROOT}%{_initddir}/phabricator
 
 mkdir -p ${RPM_BUILD_ROOT}/var/log/phabricator
+
+ln -sf /usr/libexec/git-core/git-http-backend ${DEST}/phabricator/support/bin/git-http-backend
 
 %clean
 rm -rf $RPM_BUILD_ROOT
