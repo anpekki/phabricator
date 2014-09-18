@@ -12,6 +12,23 @@ Howto build:
 * phabricator-arcanist: "arc" tool
 * phabricator-libphutil: libphutil php lib
 
+Install:
+* yum localinstall ~/rpmbuild/RPMS/noarch/phabricator-*.rpm
+* /opt/phacility/phabricator/bin/config set mysql.user dbuser
+* /opt/phacility/phabricator/bin/config set mysql.pass dbpass
+* /opt/phacility/phabricator/bin/storage upgrade
+* service phabricator start
+* cp resources/rhel/phabricator.httpd.conf /etc/httpd/conf.d/phabricator.conf
+* service httpd restart
+
+Upgrade:
+* service httpd stop
+* service phabricator stop
+* yum localinstall ~/rpmbuild/RPMS/noarch/phabricator-*.rpm
+* /opt/phacility/phabricator/bin/storage upgrade
+* service phabricator start
+* service httpd start
+
 Original README:
 
 Phabricator is an open source collection of web applications which help
