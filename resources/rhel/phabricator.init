@@ -1,0 +1,85 @@
+#!/bin/sh
+#
+# phabricator - applications that help software companies build better software
+#
+# chkconfig:   - 99 01
+# description: Phabricator is a collection of open source web \
+#              applications that help software companies build better software.
+
+# http://www.phabricator.org
+### BEGIN INIT INFO
+# Provides: phabricator
+# Required-Start: network mysqld
+# Required-Stop:
+# Should-Start:
+# Should-Stop:
+# Default-Start:
+# Default-Stop:
+# Short-Description:
+# Description:
+### END INIT INFO
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+exec="/opt/phacility/phabricator/bin/phd"
+prog=$(basename $exec)
+runas=phabricator
+rundir=/var/run/phabricator
+
+[ -e /etc/sysconfig/$prog ] && . /etc/sysconfig/$prog
+
+lockfile=/var/lock/subsys/$prog
+
+if ! [ -e "$rundir" ]; then
+  mkdir "$rundir"
+  chmod 0700 "$rundir"
+  chown phabricator:phabricator "$rundir"
+fi
+
+start() {
+    echo -n $"Starting $prog: "
+    sudo -H -u "${runas}" $exec start
+    retval=$?
+    echo
+    [ $retval -eq 0 ] && touch $lockfile
+    return $retval
+}
+
+stop() {
+    echo -n $"Stopping $prog: "
+    sudo -H -u "${runas}" $exec stop
+    retval=$?
+    echo
+    [ $retval -eq 0 ] && rm -f $lockfile
+    return $retval
+}
+
+restart() {
+    sudo -H -u "${runas}" $exec restart
+}
+
+case "$1" in
+    start|stop|restart)
+        $1
+        ;;
+    force-reload)
+        restart
+        ;;
+    status)
+        sudo -H -u "${runas}" $exec status
+        ;;
+    try-restart|condrestart)
+        if status $prog >/dev/null ; then
+            restart
+        fi
+        ;;
+    reload)
+        action $"Service ${0##*/} does not support the reload action: " \
+          /bin/false
+        exit 3
+        ;;
+    *)
+        echo $"Usage: $0 {start|stop|status|restart|try-restart|force-reload}"
+        exit 2
+esac
