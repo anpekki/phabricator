@@ -39,7 +39,7 @@ fi
 
 start() {
     echo -n $"Starting $prog: "
-    sudo -H -u "${runas}" $exec start
+    runuser -l -c "${exec} start" "${runas}"
     retval=$?
     echo
     [ $retval -eq 0 ] && touch $lockfile
@@ -48,7 +48,7 @@ start() {
 
 stop() {
     echo -n $"Stopping $prog: "
-    sudo -H -u "${runas}" $exec stop
+    runuser -l -c "${exec} stop" "${runas}"
     retval=$?
     echo
     [ $retval -eq 0 ] && rm -f $lockfile
@@ -56,7 +56,7 @@ stop() {
 }
 
 restart() {
-    sudo -H -u "${runas}" $exec restart
+    runuser -l -c "${exec} restart" "${runas}"
 }
 
 case "$1" in
@@ -67,7 +67,7 @@ case "$1" in
         restart
         ;;
     status)
-        sudo -H -u "${runas}" $exec status
+        runuser -l -c "${exec} status" "${runas}"
         ;;
     try-restart|condrestart)
         if status $prog >/dev/null ; then
