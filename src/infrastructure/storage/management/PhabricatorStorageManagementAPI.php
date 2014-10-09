@@ -109,10 +109,14 @@ final class PhabricatorStorageManagementAPI {
   }
 
   public function createDatabase($fragment) {
+    $info = $this->getCharsetInfo();
+    list($charset, $collate_text, $collate_sort) = $info;
+
     queryfx(
       $this->getConn(null),
-      'CREATE DATABASE IF NOT EXISTS %T COLLATE utf8_general_ci',
-      $this->getDatabaseName($fragment));
+      'CREATE DATABASE IF NOT EXISTS %T COLLATE %T',
+      $this->getDatabaseName($fragment),
+      $collate_text);
   }
 
   public function createTable($fragment, $table, array $cols) {
@@ -188,8 +192,10 @@ final class PhabricatorStorageManagementAPI {
     foreach ($queries as $query) {
       $query = str_replace('{$NAMESPACE}', $this->namespace, $query);
       $query = str_replace('{$CHARSET}', $charset, $query);
-      $query = str_replace('{$COLLATE_TEXT}', $collate_text, $query);
-      $query = str_replace('{$COLLATE_SORT}', $collate_sort, $query);
+      $escaped_text = qsprintf($conn, '%T', $collate_text);
+      $query = str_replace('{$COLLATE_TEXT}', $escaped_text, $query);
+      $escaped_text = qsprintf($conn, '%T', $collate_sort);
+      $query = str_replace('{$COLLATE_SORT}', $escaped_text, $query);
       queryfx(
         $conn,
         '%Q',

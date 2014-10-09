@@ -3,22 +3,24 @@
 final class HarbormasterSchemaSpec extends PhabricatorConfigSchemaSpec {
 
   public function buildSchemata() {
-    $this->buildLiskSchemata('HarbormasterDAO');
-
     $this->buildEdgeSchemata(new HarbormasterBuildable());
-    $this->buildCounterSchema(new HarbormasterBuildable());
 
-    $this->buildTransactionSchema(
-      new HarbormasterBuildableTransaction());
+    // NOTE: This table is not used by any Harbormaster objects, but is used
+    // by unit tests.
+    $this->buildRawSchema(
+      id(new HarbormasterObject())->getApplicationName(),
+      PhabricatorLiskDAO::COUNTER_TABLE_NAME,
+      array(
+        'counterName' => 'text32',
+        'counterValue' => 'id64',
+      ),
+      array(
+        'PRIMARY' => array(
+          'columns' => array('counterName'),
+          'unique' => true,
+        ),
+      ));
 
-    $this->buildTransactionSchema(
-      new HarbormasterBuildTransaction());
-
-    $this->buildTransactionSchema(
-      new HarbormasterBuildPlanTransaction());
-
-    $this->buildTransactionSchema(
-      new HarbormasterBuildStepTransaction());
 
     $this->buildRawSchema(
       id(new HarbormasterBuildable())->getApplicationName(),
