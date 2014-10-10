@@ -7,6 +7,7 @@ final class PhortuneCart extends PhortuneDAO
   const STATUS_READY = 'cart:ready';
   const STATUS_PURCHASING = 'cart:purchasing';
   const STATUS_CHARGED = 'cart:charged';
+  const STATUS_HOLD = 'cart:hold';
   const STATUS_PURCHASED = 'cart:purchased';
 
   protected $accountPHID;
@@ -57,6 +58,7 @@ final class PhortuneCart extends PhortuneDAO
       self::STATUS_READY => pht('Ready'),
       self::STATUS_PURCHASING => pht('Purchasing'),
       self::STATUS_CHARGED => pht('Charged'),
+      self::STATUS_HOLD => pht('Hold'),
       self::STATUS_PURCHASED => pht('Purchased'),
     );
   }
@@ -113,8 +115,8 @@ final class PhortuneCart extends PhortuneDAO
     return $charge;
   }
 
-  public function didApplyCharge(PhortuneCharge $charge) {
-    $charge->setStatus(PhortuneCharge::STATUS_CHARGED);
+  public function didHoldCharge(PhortuneCharge $charge) {
+    $charge->setStatus(PhortuneCharge::STATUS_HOLD);
 
     $this->openTransaction();
       $this->beginReadLocking();
@@ -125,10 +127,34 @@ final class PhortuneCart extends PhortuneDAO
         if ($copy->getStatus() !== self::STATUS_PURCHASING) {
           throw new Exception(
             pht(
-              'Cart has wrong status ("%s") to call didApplyCharge(), '.
+              'Cart has wrong status ("%s") to call didHoldCharge(), '.
               'expected "%s".',
               $copy->getStatus(),
               self::STATUS_PURCHASING));
+        }
+
+        $charge->save();
+        $this->setStatus(self::STATUS_HOLD)->save();
+
+      $this->endReadLocking();
+    $this->saveTransaction();
+  }
+
+  public function didApplyCharge(PhortuneCharge $charge) {
+    $charge->setStatus(PhortuneCharge::STATUS_CHARGED);
+
+    $this->openTransaction();
+      $this->beginReadLocking();
+
+        $copy = clone $this;
+        $copy->reload();
+
+        if (($copy->getStatus() !== self::STATUS_PURCHASING) &&
+            ($copy->getStatus() !== self::STATUS_HOLD)) {
+          throw new Exception(
+            pht(
+              'Cart has wrong status ("%s") to call didApplyCharge().',
+              $copy->getStatus()));
         }
 
         $charge->save();
@@ -155,13 +181,12 @@ final class PhortuneCart extends PhortuneDAO
         $copy = clone $this;
         $copy->reload();
 
-        if ($copy->getStatus() !== self::STATUS_PURCHASING) {
+        if (($copy->getStatus() !== self::STATUS_PURCHASING) &&
+            ($copy->getStatus() !== self::STATUS_HOLD)) {
           throw new Exception(
             pht(
-              'Cart has wrong status ("%s") to call didFailCharge(), '.
-              'expected "%s".',
-              $copy->getStatus(),
-              self::STATUS_PURCHASING));
+              'Cart has wrong status ("%s") to call didFailCharge().',
+              $copy->getStatus()));
         }
 
         $charge->save();
@@ -198,7 +223,8 @@ final class PhortuneCart extends PhortuneDAO
         pht('Trying to refund a refund!'));
     }
 
-    if ($charge->getStatus() !== PhortuneCharge::STATUS_CHARGED) {
+    if (($charge->getStatus() !== PhortuneCharge::STATUS_CHARGED) &&
+        ($charge->getStatus() !== PhortuneCharge::STATUS_HOLD)) {
       throw new Exception(
         pht('Trying to refund an uncharged charge!'));
     }
@@ -304,6 +330,10 @@ final class PhortuneCart extends PhortuneDAO
 
   public function getDoneURI() {
     return $this->getImplementation()->getDoneURI($this);
+  }
+
+  public function getDoneActionName() {
+    return $this->getImplementation()->getDoneActionName($this);
   }
 
   public function getCancelURI() {
@@ -462,7 +492,11 @@ final class PhortuneCart extends PhortuneDAO
   }
 
   public function getPolicy($capability) {
-    return $this->getAccount()->getPolicy($capability);
+    // NOTE: Both view and edit use the account's edit policy. We punch a hole
+    // through this for merchants, below.
+    return $this
+      ->getAccount()
+      ->getPolicy(PhabricatorPolicyCapability::CAN_EDIT);
   }
 
   public function hasAutomaticCapability($capability, PhabricatorUser $viewer) {
