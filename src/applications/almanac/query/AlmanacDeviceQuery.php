@@ -5,6 +5,8 @@ final class AlmanacDeviceQuery
 
   private $ids;
   private $phids;
+  private $names;
+  private $datasourceQuery;
 
   public function withIDs(array $ids) {
     $this->ids = $ids;
@@ -13,6 +15,16 @@ final class AlmanacDeviceQuery
 
   public function withPHIDs(array $phids) {
     $this->phids = $phids;
+    return $this;
+  }
+
+  public function withNames(array $names) {
+    $this->names = $names;
+    return $this;
+  }
+
+  public function withDatasourceQuery($query) {
+    $this->datasourceQuery = $query;
     return $this;
   }
 
@@ -46,6 +58,24 @@ final class AlmanacDeviceQuery
         $conn_r,
         'phid IN (%Ls)',
         $this->phids);
+    }
+
+    if ($this->names !== null) {
+      $hashes = array();
+      foreach ($this->names as $name) {
+        $hashes[] = PhabricatorHash::digestForIndex($name);
+      }
+      $where[] = qsprintf(
+        $conn_r,
+        'nameIndex IN (%Ls)',
+        $hashes);
+    }
+
+    if ($this->datasourceQuery !== null) {
+      $where[] = qsprintf(
+        $conn_r,
+        'name LIKE %>',
+        $this->datasourceQuery);
     }
 
     $where[] = $this->buildPagingClause($conn_r);
