@@ -18,6 +18,7 @@ final class ManiphestBatchEditController extends ManiphestController {
           PhabricatorPolicyCapability::CAN_VIEW,
           PhabricatorPolicyCapability::CAN_EDIT,
         ))
+      ->needSubscriberPHIDs(true)
       ->execute();
 
     $actions = $request->getStr('actions');
@@ -115,11 +116,8 @@ final class ManiphestBatchEditController extends ManiphestController {
           'id'   => 'batch-form-actions',
         )));
     $form->appendChild(
-      phutil_tag('p', array(), pht('These tasks will be edited:')));
-    $form->appendChild($list);
-    $form->appendChild(
       id(new PHUIFormInsetView())
-        ->setTitle('Actions')
+        ->setTitle(pht('Actions'))
         ->setRightButton(javelin_tag(
             'a',
             array(
@@ -146,18 +144,22 @@ final class ManiphestBatchEditController extends ManiphestController {
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb($title);
 
+    $task_box = id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Selected Tasks'))
+      ->appendChild($list);
+
     $form_box = id(new PHUIObjectBoxView())
-      ->setHeaderText(pht('Batch Edit Tasks'))
+      ->setHeaderText(pht('Batch Editor'))
       ->setForm($form);
 
     return $this->buildApplicationPage(
       array(
         $crumbs,
+        $task_box,
         $form_box,
       ),
       array(
         'title' => $title,
-        'device' => false,
       ));
   }
 
@@ -170,8 +172,8 @@ final class ManiphestBatchEditController extends ManiphestController {
       'priority'        => ManiphestTransaction::TYPE_PRIORITY,
       'add_project'     => ManiphestTransaction::TYPE_PROJECTS,
       'remove_project'  => ManiphestTransaction::TYPE_PROJECTS,
-      'add_ccs'         => ManiphestTransaction::TYPE_CCS,
-      'remove_ccs'      => ManiphestTransaction::TYPE_CCS,
+      'add_ccs'         => PhabricatorTransactions::TYPE_SUBSCRIBERS,
+      'remove_ccs'      => PhabricatorTransactions::TYPE_SUBSCRIBERS,
     );
 
     $edge_edit_types = array(
@@ -214,8 +216,8 @@ final class ManiphestBatchEditController extends ManiphestController {
           case ManiphestTransaction::TYPE_PROJECTS:
             $current = $task->getProjectPHIDs();
             break;
-          case ManiphestTransaction::TYPE_CCS:
-            $current = $task->getCCPHIDs();
+          case PhabricatorTransactions::TYPE_SUBSCRIBERS:
+            $current = $task->getSubscriberPHIDs();
             break;
         }
       }
@@ -245,7 +247,7 @@ final class ManiphestBatchEditController extends ManiphestController {
             continue 2;
           }
           break;
-        case ManiphestTransaction::TYPE_CCS:
+        case PhabricatorTransactions::TYPE_SUBSCRIBERS:
           if (empty($value)) {
             continue 2;
           }
@@ -273,12 +275,7 @@ final class ManiphestBatchEditController extends ManiphestController {
           }
           break;
         case ManiphestTransaction::TYPE_PROJECTS:
-        case ManiphestTransaction::TYPE_CCS:
-          $remove_actions = array(
-            'remove_project' => true,
-            'remove_ccs'    => true,
-          );
-          $is_remove = isset($remove_actions[$action['action']]);
+          $is_remove = $action['action'] == 'remove_project';
 
           $current = array_fill_keys($current, true);
           $value   = array_fill_keys($value, true);
@@ -307,6 +304,39 @@ final class ManiphestBatchEditController extends ManiphestController {
           }
 
           $value = array_keys($new);
+          break;
+        case PhabricatorTransactions::TYPE_SUBSCRIBERS:
+          $is_remove = $action['action'] == 'remove_ccs';
+
+          $current = array_fill_keys($current, true);
+
+          $new = array();
+          $did_something = false;
+
+          if ($is_remove) {
+            foreach ($value as $phid) {
+              if (isset($current[$phid])) {
+                $new[$phid] = true;
+                $did_something = true;
+              }
+            }
+            if ($new) {
+              $value = array('-' => array_keys($new));
+            }
+          } else {
+            $new = array();
+            foreach ($value as $phid) {
+              $new[$phid] = true;
+              $did_something = true;
+            }
+            if ($new) {
+              $value = array('+' => array_keys($new));
+            }
+          }
+          if (!$did_something) {
+            continue 2;
+          }
+
           break;
       }
 

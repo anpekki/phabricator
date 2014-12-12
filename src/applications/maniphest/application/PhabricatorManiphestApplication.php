@@ -66,14 +66,16 @@ final class PhabricatorManiphestApplication extends PhabricatorApplication {
         ),
         'export/(?P<key>[^/]+)/' => 'ManiphestExportController',
         'subpriority/' => 'ManiphestSubpriorityController',
-        'subscribe/(?P<action>add|rem)/(?P<id>[1-9]\d*)/'
-          => 'ManiphestSubscribeController',
       ),
     );
   }
 
   public function loadStatus(PhabricatorUser $user) {
     $status = array();
+
+    if (!$user->isLoggedIn()) {
+      return $status;
+    }
 
     $query = id(new ManiphestTaskQuery())
       ->setViewer($user)

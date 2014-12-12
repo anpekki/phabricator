@@ -10,6 +10,7 @@ final class PhrictionTransactionEditor
   private $skipAncestorCheck;
   private $contentVersion;
   private $processContentVersionError = true;
+  private $heraldEmailPHIDs = array();
 
   public function setDescription($description) {
     $this->description = $description;
@@ -359,6 +360,16 @@ final class PhrictionTransactionEditor
     );
   }
 
+  protected function getMailCC(PhabricatorLiskDAO $object) {
+    $phids = array();
+
+    foreach ($this->heraldEmailPHIDs as $phid) {
+      $phids[] = $phid;
+    }
+
+    return $phids;
+  }
+
   public function getMailTagsMap() {
     return array(
       PhrictionTransaction::MAILTAG_TITLE =>
@@ -394,6 +405,24 @@ final class PhrictionTransactionEditor
       $body->addTextSection(
         pht('DOCUMENT CONTENT'),
         $object->getContent()->getContent());
+    } else {
+
+      foreach ($xactions as $xaction) {
+        switch ($xaction->getTransactionType()) {
+          case PhrictionTransaction::TYPE_CONTENT:
+            $diff_uri = id(new PhutilURI(
+              '/phriction/diff/'.$object->getID().'/'))
+              ->alter('l', $this->getOldContent()->getVersion())
+              ->alter('r', $this->getNewContent()->getVersion());
+            $body->addLinkSection(
+              pht('DOCUMENT DIFF'),
+              PhabricatorEnv::getProductionURI($diff_uri));
+            break 2;
+          default:
+            break;
+        }
+      }
+
     }
 
     $body->addLinkSection(
@@ -526,13 +555,24 @@ final class PhrictionTransactionEditor
             ->needContent(true)
             ->executeOne();
 
-          // Considering to overwrite existing docs? Nuke this!
+          // Prevent overwrites and no-op moves.
           $exists = PhrictionDocumentStatus::STATUS_EXISTS;
-          if ($target_document && $target_document->getStatus() == $exists) {
+          if ($target_document) {
+            if ($target_document->getSlug() == $source_document->getSlug()) {
+              $message = pht(
+                'You can not move a document to its existing location. '.
+                'Choose a different location to move the document to.');
+            } else if ($target_document->getStatus() == $exists) {
+              $message = pht(
+                'You can not move this document there, because it would '.
+                'overwrite an existing document which is already at that '.
+                'location. Move or delete the existing document first.');
+            }
+
             $error = new PhabricatorApplicationTransactionValidationError(
               $type,
-              pht('Can not move document.'),
-              pht('Can not overwrite existing target document.'),
+              pht('Invalid'),
+              $message,
               $xaction);
             $errors[] = $error;
           }
@@ -587,6 +627,58 @@ final class PhrictionTransactionEditor
     }
     return $error;
   }
+  protected function requireCapabilities(
+    PhabricatorLiskDAO $object,
+    PhabricatorApplicationTransaction $xaction) {
+
+    /*
+     * New objects have a special case. If a user can't see
+     *   x/y
+     * then definitely don't let them make some
+     *   x/y/z
+     * We need to load the direct parent to handle this case.
+     */
+    if ($this->getIsNewObject()) {
+      $actor = $this->requireActor();
+      $parent_doc = null;
+      $ancestral_slugs = PhabricatorSlug::getAncestry($object->getSlug());
+      // No ancestral slugs is "/"; the first person gets to play with "/".
+      if ($ancestral_slugs) {
+        $parent = end($ancestral_slugs);
+        $parent_doc = id(new PhrictionDocumentQuery())
+          ->setViewer($actor)
+          ->withSlugs(array($parent))
+          ->executeOne();
+        // If the $actor can't see the $parent_doc then they can't create
+        // the child $object; throw a policy exception.
+        if (!$parent_doc) {
+          id(new PhabricatorPolicyFilter())
+            ->setViewer($actor)
+            ->raisePolicyExceptions(true)
+            ->rejectObject(
+              $object,
+              $object->getEditPolicy(),
+              PhabricatorPolicyCapability::CAN_EDIT);
+        }
+
+        // If the $actor can't edit the $parent_doc then they can't create
+        // the child $object; throw a policy exception.
+        if (!PhabricatorPolicyFilter::hasCapability(
+          $actor,
+          $parent_doc,
+          PhabricatorPolicyCapability::CAN_EDIT)) {
+          id(new PhabricatorPolicyFilter())
+            ->setViewer($actor)
+            ->raisePolicyExceptions(true)
+            ->rejectObject(
+              $object,
+              $object->getEditPolicy(),
+              PhabricatorPolicyCapability::CAN_EDIT);
+        }
+      }
+    }
+    return parent::requireCapabilities($object, $xaction);
+  }
 
   protected function supportsSearch() {
     return true;
@@ -595,7 +687,35 @@ final class PhrictionTransactionEditor
   protected function shouldApplyHeraldRules(
     PhabricatorLiskDAO $object,
     array $xactions) {
-    return false;
+    return true;
+  }
+
+  protected function buildHeraldAdapter(
+    PhabricatorLiskDAO $object,
+    array $xactions) {
+
+    return id(new PhrictionDocumentHeraldAdapter())
+      ->setDocument($object);
+  }
+
+  protected function didApplyHeraldRules(
+    PhabricatorLiskDAO $object,
+    HeraldAdapter $adapter,
+    HeraldTranscript $transcript) {
+
+    $xactions = array();
+
+    $cc_phids = $adapter->getCcPHIDs();
+    if ($cc_phids) {
+      $value = array_fuse($cc_phids);
+      $xactions[] = id(new PhrictionTransaction())
+        ->setTransactionType(PhabricatorTransactions::TYPE_SUBSCRIBERS)
+        ->setNewValue(array('+' => $value));
+    }
+
+    $this->heraldEmailPHIDs = $adapter->getEmailPHIDs();
+
+    return $xactions;
   }
 
   private function buildNewContentTemplate(

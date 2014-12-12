@@ -733,6 +733,13 @@ abstract class PhabricatorApplicationTransactionEditor
       // We are the Herald editor, so stop work here and return the updated
       // transactions.
       return $xactions;
+    } else if ($this->getIsInverseEdgeEditor()) {
+      // If we're applying inverse edge transactions, don't trigger Herald.
+      // From a product perspective, the current set of inverse edges (most
+      // often, mentions) aren't things users would expect to trigger Herald.
+      // From a technical perspective, objects loaded by the inverse editor may
+      // not have enough data to execute rules. At least for now, just stop
+      // Herald from executing when applying inverse edges.
     } else if ($this->shouldApplyHeraldRules($object, $xactions)) {
       // We are not the Herald editor, so try to apply Herald rules.
       $herald_xactions = $this->applyHeraldRules($object, $xactions);
@@ -1116,6 +1123,29 @@ abstract class PhabricatorApplicationTransactionEditor
     return array($xaction);
   }
 
+
+  public function getExpandedSupportTransactions(
+    PhabricatorLiskDAO $object,
+    PhabricatorApplicationTransaction $xaction) {
+
+    $xactions = array($xaction);
+    $xactions = $this->expandSupportTransactions(
+      $object,
+      $xactions);
+
+    if (count($xactions) == 1) {
+      return array();
+    }
+
+    foreach ($xactions as $index => $cxaction) {
+      if ($cxaction === $xaction) {
+        unset($xactions[$index]);
+        break;
+      }
+    }
+
+    return $xactions;
+  }
 
   private function expandSupportTransactions(
     PhabricatorLiskDAO $object,
@@ -1899,6 +1929,8 @@ abstract class PhabricatorApplicationTransactionEditor
       $body->addReplySection($reply_section);
     }
 
+    $body->addEmailPreferenceSection();
+
     $template
       ->setFrom($this->getActingAsPHID())
       ->setSubjectPrefix($this->getMailSubjectPrefix())
@@ -2012,7 +2044,6 @@ abstract class PhabricatorApplicationTransactionEditor
   protected function buildReplyHandler(PhabricatorLiskDAO $object) {
     throw new Exception('Capability not supported.');
   }
-
 
   /**
    * @task mail
@@ -2159,10 +2190,11 @@ abstract class PhabricatorApplicationTransactionEditor
     }
 
     $body = new PhabricatorMetaMTAMailBody();
+    $body->setViewer($this->requireActor());
     $body->addRawSection(implode("\n", $headers));
 
     foreach ($comments as $comment) {
-      $body->addRawSection($comment);
+      $body->addRemarkupSection($comment);
     }
 
     if ($object instanceof PhabricatorCustomFieldInterface) {

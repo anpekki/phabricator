@@ -526,4 +526,52 @@ abstract class PhabricatorController extends AphrontController {
       ->setSubmitURI($submit_uri);
   }
 
+  protected function buildTransactionTimeline(
+    PhabricatorApplicationTransactionInterface $object,
+    PhabricatorApplicationTransactionQuery $query,
+    PhabricatorMarkupEngine $engine = null,
+    $render_data = array()) {
+
+    $viewer = $this->getRequest()->getUser();
+    $xaction = $object->getApplicationTransactionTemplate();
+    $view = $xaction->getApplicationTransactionViewObject();
+
+    $pager = id(new AphrontCursorPagerView())
+      ->readFromRequest($this->getRequest())
+      ->setURI(new PhutilURI(
+        '/transactions/showolder/'.$object->getPHID().'/'));
+
+    $xactions = $query
+      ->setViewer($viewer)
+      ->withObjectPHIDs(array($object->getPHID()))
+      ->needComments(true)
+      ->setReversePaging(false)
+      ->executeWithCursorPager($pager);
+    $xactions = array_reverse($xactions);
+
+    if ($engine) {
+      foreach ($xactions as $xaction) {
+        if ($xaction->getComment()) {
+          $engine->addObject(
+            $xaction->getComment(),
+            PhabricatorApplicationTransactionComment::MARKUP_FIELD_COMMENT);
+        }
+      }
+      $engine->process();
+      $view->setMarkupEngine($engine);
+    }
+
+    $timeline = $view
+      ->setUser($viewer)
+      ->setObjectPHID($object->getPHID())
+      ->setTransactions($xactions)
+      ->setPager($pager)
+      ->setRenderData($render_data)
+      ->setQuoteTargetID($this->getRequest()->getStr('quoteTargetID'))
+      ->setQuoteRef($this->getRequest()->getStr('quoteRef'));
+    $object->willRenderTimeline($timeline, $this->getRequest());
+
+    return $timeline;
+  }
+
 }
