@@ -1,6 +1,8 @@
 /etc/rc\.d/init\.d/phabricator				gen_context(system_u:object_r:phabricator_initrc_exec_t,s0)
 /opt/phacility/phabricator(/.*)?			gen_context(system_u:object_r:phabricator_t,s0)
 /opt/phacility/phabricator/bin/.*			gen_context(system_u:object_r:phabricator_exec_t,s0)
+/opt/phacility/phabricator/scripts/.*\.php		gen_context(system_u:object_r:phabricator_exec_t,s0)
 /opt/phacility/phabricator/conf/local(/.*)? 		gen_context(system_u:object_r:phabricator_etc_t,s0)
 /var/lib/phabricator(/.*)?				gen_context(system_u:object_r:phabricator_var_lib_t,s0)
 /var/log/phabricator(/.*)?				gen_context(system_u:object_r:phabricator_log_t,s0)
+/var/run/phabricator(/.*)?				gen_context(system_u:object_r:phabricator_var_run_t,s0)

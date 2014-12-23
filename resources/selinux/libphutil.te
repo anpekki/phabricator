@@ -1,7 +1,2 @@
-policy_module(libphutil,0.1)
-
-# Private type declarations
-type libphutil_t;
-
-# ----
+policy_module(libphutil,0.2)
 

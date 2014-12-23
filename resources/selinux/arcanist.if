@@ -26,7 +26,7 @@
 ## </param>
 #
 interface(`arcanist_domtrans',`
-	gen_requires(`
+	gen_require(`
 		type arcanist_t, arcanist_exec_t;
 	')
 

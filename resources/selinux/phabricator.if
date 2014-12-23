@@ -26,10 +26,29 @@
 ## </param>
 #
 interface(`phabricator_domtrans',`
-	gen_requires(`
+	gen_require(`
 		type phabricator_t, phabricator_exec_t;
 	')
 
 	domtrans_pattern($1,phabricator_exec_t,phabricator_t)
+')
+
+##############################################
+## <summary>
+##  Manage phabricator lib files
+## </summary>
+## <param name="domain">
+##  <summary>
+##  Domain allowed access.
+##  </summary>
+## </param>
+#
+interface(`phabricator_manage_lib',`
+    gen_require(`
+        type phabricator_var_lib_t;
+    ')
+
+    manage_files_pattern($1, phabricator_var_lib_t, phabricator_var_lib_t)
+    files_search_var_lib($1)
 ')
 

@@ -1,2 +1,3 @@
-/opt/phacility/arcanist(/.*)?			gen_context(system_u:object_r:arcanist_t,s0)
-/opt/phacility/arcanist/bin/.*		--	gen_context(system_u:object_r:arcanist_exec_t,s0)
+/opt/phacility/arcanist(/.*)?			gen_context(system_u:object_r:usr_t,s0)
+/opt/phacility/arcanist/bin/.*		--	gen_context(system_u:object_r:bin_t,s0)
+/opt/phacility/arcanist/scripts/.*\.(php|py|sh) --      gen_context(system_u:object_r:bin_t,s0)

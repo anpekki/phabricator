@@ -1,1 +1,2 @@
-/opt/phacility/libphutil(/.*)?			gen_context(system_u:object_r:libphutil_t,s0)
+/opt/phacility/libphutil(/.*)?			gen_context(system_u:object_r:usr_t,s0)
+/opt/phacility/libphutil/scripts/.*\.php	gen_context(system_u:object_r:bin_t,s0)

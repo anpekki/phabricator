@@ -1,20 +1,25 @@
-policy_module(phabricator,0.9)
+policy_module(phabricator,0.26)
 
 gen_require(`
-  type libphutil_t;
-  type arcanist_t;
   type httpd_t;
+  type urandom_device_t;
+  type bin_t;
+  type shell_exec_t;
+  type proc_t;
+  type locale_t;
 ')
 
 
 # Private type declarations
 type phabricator_t;
 type phabricator_exec_t;
+init_daemon_domain(phabricator_t, phabricator_exec_t)
 
 type phabricator_etc_t;
 files_config_file(phabricator_etc_t)
 
 type phabricator_initrc_exec_t;
+init_script_file(phabricator_initrc_exec_t)
 
 type phabricator_log_t;
 logging_log_file(phabricator_log_t)
@@ -30,34 +35,65 @@ files_pid_file(phabricator_var_run_t)
 
 # ----
 
-# Init scripts
-init_daemon_domain(phabricator_t, phabricator_exec_t)
-init_script_file(phabricator_initrc_exec_t)
 init_all_labeled_script_domtrans(phabricator_t) 
 init_domtrans_script(phabricator_t) 
 init_read_utmp(phabricator_t) 
 init_signull_script(phabricator_t) 
+allow phabricator_t initrc_t:dir search;
+allow phabricator_t initrc_t:file { read open };
 
+dev_read_urand(phabricator_t)
+allow phabricator_t bin_t:file ioctl;
+allow phabricator_t self:process { getpgid signull signal };
 
-# access libphutil
-read_files_pattern(phabricator_t,libphutil_t,libphutil_t)
+# /var/lib/phabricator access
+manage_dirs_pattern(phabricator_t,phabricator_var_lib_t,phabricator_var_lib_t)
+manage_files_pattern(phabricator_t,phabricator_var_lib_t,phabricator_var_lib_t)
+
+# locale access
+list_dirs_pattern(phabricator_t,locale_t,locale_t)
+read_files_pattern(phabricator_t,locale_t,locale_t)
+
+# access to linked scripts
+read_lnk_files_pattern(phabricator_t,phabricator_exec_t,phabricator_exec_t)
+read_lnk_files_pattern(phabricator_t,bin_t,bin_t)
+
+# execute other scripts
+can_exec(phabricator_t, { bin_t shell_exec_t phabricator_exec_t })
 
 # read configs
 read_files_pattern(phabricator_t,phabricator_etc_t,phabricator_etc_t)
 
+# mysql socket access
+mysql_stream_connect(phabricator_t)
+
+# proc access
+list_dirs_pattern(phabricator_t,proc_t,proc_t)
+read_files_pattern(phabricator_t,proc_t,proc_t)
+domain_read_all_domains_state(phabricator_t)
+
 # create/read logfiles
 create_files_pattern(phabricator_t,phabricator_log_t,phabricator_log_t)
 append_files_pattern(phabricator_t,phabricator_log_t,phabricator_log_t)
-read_files_pattern(phabricator_t,phabricator_log_t,phabricator_log_t)
-logging_log_filetrans(phabricator_t,phabricator_log_t, { file dir })
+logging_log_filetrans(phabricator_t, phabricator_log_t, { file dir })
+
+# pid file access
+manage_files_pattern(phabricator_t,phabricator_var_run_t,phabricator_var_run_t)
+files_pid_filetrans(phabricator_t,phabricator_var_run_t, { file dir })
+
+
 
 # allow httpd 
-read_files_pattern(httpd_t,arcanist_t,arcanist_t)
-read_files_pattern(httpd_t,libphutil_t,libphutil_t)
 read_files_pattern(httpd_t,phabricator_t,phabricator_t)
 read_files_pattern(httpd_t,phabricator_var_lib_t,phabricator_var_lib_t)
-allow httpd_t arcanist_t:dir read;
-allow httpd_t libphutil_t:dir read;
 allow httpd_t phabricator_t:dir read;
 allow httpd_t phabricator_var_lib_t:dir read;
+allow httpd_t phabricator_t:lnk_file read;
+allow httpd_t self:capability sys_ptrace;
+# can be allowed using the boolean 'allow_httpd_mod_auth_pam'
+allow httpd_t self:capability { sys_resource audit_write };
+# can be allowed using the boolean 'allow_httpd_mod_auth_pam'
+allow httpd_t self:netlink_audit_socket { nlmsg_relay create };
+# can be allowed using the boolean 'httpd_setrlimit'
+allow httpd_t self:process setrlimit;
 
