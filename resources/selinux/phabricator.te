@@ -1,0 +1,63 @@
+policy_module(phabricator,0.9)
+
+gen_require(`
+  type libphutil_t;
+  type arcanist_t;
+  type httpd_t;
+')
+
+
+# Private type declarations
+type phabricator_t;
+type phabricator_exec_t;
+
+type phabricator_etc_t;
+files_config_file(phabricator_etc_t)
+
+type phabricator_initrc_exec_t;
+
+type phabricator_log_t;
+logging_log_file(phabricator_log_t)
+
+type phabricator_tmp_t;
+files_tmp_file(phabricator_tmp_t)
+
+type phabricator_var_lib_t;
+files_type(phabricator_var_lib_t)
+
+type phabricator_var_run_t;
+files_pid_file(phabricator_var_run_t)
+
+# ----
+
+# Init scripts
+init_daemon_domain(phabricator_t, phabricator_exec_t)
+init_script_file(phabricator_initrc_exec_t)
+init_all_labeled_script_domtrans(phabricator_t) 
+init_domtrans_script(phabricator_t) 
+init_read_utmp(phabricator_t) 
+init_signull_script(phabricator_t) 
+
+
+# access libphutil
+read_files_pattern(phabricator_t,libphutil_t,libphutil_t)
+
+# read configs
+read_files_pattern(phabricator_t,phabricator_etc_t,phabricator_etc_t)
+
+# create/read logfiles
+create_files_pattern(phabricator_t,phabricator_log_t,phabricator_log_t)
+append_files_pattern(phabricator_t,phabricator_log_t,phabricator_log_t)
+read_files_pattern(phabricator_t,phabricator_log_t,phabricator_log_t)
+logging_log_filetrans(phabricator_t,phabricator_log_t, { file dir })
+
+# allow httpd 
+read_files_pattern(httpd_t,arcanist_t,arcanist_t)
+read_files_pattern(httpd_t,libphutil_t,libphutil_t)
+read_files_pattern(httpd_t,phabricator_t,phabricator_t)
+read_files_pattern(httpd_t,phabricator_var_lib_t,phabricator_var_lib_t)
+allow httpd_t arcanist_t:dir read;
+allow httpd_t libphutil_t:dir read;
+allow httpd_t phabricator_t:dir read;
+allow httpd_t phabricator_var_lib_t:dir read;
+

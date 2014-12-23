@@ -1,0 +1,1 @@
+/opt/phacility/libphutil(/.*)?			gen_context(system_u:object_r:libphutil_t,s0)
