@@ -1,0 +1,27 @@
+There are systems with selinux alwasys-on policy - really!
+
+So phabricator needs a selinux policy.
+
+Default paths for file contexts:
+/opt/phacility/{libphutil,arcanist,phabricator}
+
+Compile SELinux modules
+
+make -f /usr/share/selinux/devel/Makefile libphutil.pp
+make -f /usr/share/selinux/devel/Makefile arcanist.pp
+make -f /usr/share/selinux/devel/Makefile phabricator.pp
+
+
+Enable SELinux modules
+
+semodule -i libphutil.pp
+semodule -i arcanist.pp
+semodule -i phabricator.pp
+
+
+Relabel phabricator files:
+
+restorecon -R /opt/phacility
+
+# if you use the https://github.com/vinzent/phabricator/tree/master/resources/rhel rpm:
+restorecon -R /etc/init.d/phabricator
