@@ -12,17 +12,6 @@ JX.require('lib/AphlictFlashPolicyServer', __dirname);
 JX.require('lib/AphlictListenerList', __dirname);
 JX.require('lib/AphlictLog', __dirname);
 
-var debug = new JX.AphlictLog()
-  .addConsole(console);
-
-var clients = new JX.AphlictListenerList();
-
-var config = parse_command_line_arguments(process.argv);
-
-if (config.logfile) {
-  debug.addLogfile(config.logfile);
-}
-
 function parse_command_line_arguments(argv) {
   var config = {
     port: 22280,
@@ -50,6 +39,17 @@ function parse_command_line_arguments(argv) {
   return config;
 }
 
+var debug = new JX.AphlictLog()
+  .addConsole(console);
+
+var clients = new JX.AphlictListenerList();
+
+var config = parse_command_line_arguments(process.argv);
+
+if (config.logfile) {
+  debug.addLogfile(config.logfile);
+}
+
 if (process.getuid() !== 0) {
   console.log(
     "ERROR: " +
@@ -69,13 +69,13 @@ process.on('uncaughtException', function(err) {
   process.exit(1);
 });
 
-var flash_server = new JX.AphlictFlashPolicyServer()
+new JX.AphlictFlashPolicyServer()
   .setDebugLog(debug)
   .setAccessPort(config.port)
   .start();
 
 
-var send_server = net.createServer(function(socket) {
+net.createServer(function(socket) {
   var listener = clients.addListener(socket);
 
   debug.log('<%s> Connected from %s',
@@ -161,7 +161,27 @@ var messages_out = 0;
 var messages_in = 0;
 var start_time = new Date().getTime();
 
-var receive_server = http.createServer(function(request, response) {
+function transmit(msg) {
+  var listeners = clients.getListeners().filter(function(client) {
+    return client.isSubscribedToAny(msg.subscribers);
+  });
+
+  for (var i = 0; i < listeners.length; i++) {
+    var listener = listeners[i];
+
+    try {
+      listener.writeMessage(msg);
+
+      ++messages_out;
+      debug.log('<%s> Wrote Message', listener.getDescription());
+    } catch (error) {
+      clients.removeListener(listener);
+      debug.log('<%s> Write Error: %s', listener.getDescription(), error);
+    }
+  }
+}
+
+http.createServer(function(request, response) {
   // Publishing a notification.
   if (request.url == '/') {
     if (request.method == 'POST') {
@@ -186,72 +206,41 @@ var receive_server = http.createServer(function(request, response) {
               '<%s> Internal Server Error! %s',
               request.socket.remoteAddress,
               err);
-            response.statusCode = 500;
-            response.write('500 Internal Server Error\n');
+            response.writeHead(500, 'Internal Server Error');
           }
         } catch (err) {
           debug.log(
             '<%s> Bad Request! %s',
             request.socket.remoteAddress,
             err);
-          response.statusCode = 400;
-          response.write('400 Bad Request\n');
+          response.writeHead(400, 'Bad Request');
         } finally {
           response.end();
         }
       });
     } else {
-      response.statusCode = 405;
-      response.write('405 Method Not Allowed\n');
+      response.writeHead(405, 'Method Not Allowed');
       response.end();
     }
   } else if (request.url == '/status/') {
-    request.on('data', function() {
-      // We just ignore the request data, but newer versions of Node don't
-      // get to 'end' if we don't process the data. See T2953.
-    });
+    var status = {
+      'uptime': (new Date().getTime() - start_time),
+      'clients.active': clients.getActiveListenerCount(),
+      'clients.total': clients.getTotalListenerCount(),
+      'messages.in': messages_in,
+      'messages.out': messages_out,
+      'log': config.log,
+      'version': 6
+    };
 
-    request.on('end', function() {
-      var status = {
-        'uptime': (new Date().getTime() - start_time),
-        'clients.active': clients.getActiveListenerCount(),
-        'clients.total': clients.getTotalListenerCount(),
-        'messages.in': messages_in,
-        'messages.out': messages_out,
-        'log': config.log,
-        'version': 6
-      };
-
-      response.writeHead(200, {'Content-Type': 'text/plain'});
-      response.write(JSON.stringify(status));
-      response.end();
-    });
+    response.writeHead(200, {'Content-Type': 'application/json'});
+    response.write(JSON.stringify(status));
+    response.end();
   } else {
-    response.statusCode = 404;
-    response.write('404 Not Found\n');
+    response.writeHead(404, 'Not Found');
     response.end();
   }
 }).listen(config.admin, config.host);
-
-function transmit(msg) {
-  var listeners = clients.getListeners().filter(function(client) {
-    return client.isSubscribedToAny(msg.subscribers);
-  });
-
-  for (var i = 0; i < listeners.length; i++) {
-    var listener = listeners[i];
-
-    try {
-      listener.writeMessage(msg);
-
-      ++messages_out;
-      debug.log('<%s> Wrote Message', listener.getDescription());
-    } catch (error) {
-      clients.removeListener(listener);
-      debug.log('<%s> Write Error: %s', listener.getDescription(), error);
-    }
-  }
-}
 
 // If we're configured to drop permissions, get rid of them now that we've
 // bound to the ports we need and opened logfiles.
