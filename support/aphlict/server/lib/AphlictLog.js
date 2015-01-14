@@ -17,10 +17,10 @@ JX.install('AphlictLog', {
       var options = {
         flags: 'a',
         encoding: 'utf8',
-        mode: 066
+        mode: 0664,
       };
 
-      var logfile = fs.createWriteSteam(path, options);
+      var logfile = fs.createWriteStream(path, options);
 
       this._writeToLogs.push(logfile);
 

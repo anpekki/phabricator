@@ -287,7 +287,7 @@ abstract class LiskDAO {
    * to change these behaviors, you should override this method in your child
    * class and change the options you're interested in. For example:
    *
-   *   public function getConfiguration() {
+   *   protected function getConfiguration() {
    *     return array(
    *       Lisk_DataAccessObject::CONFIG_EXAMPLE => true,
    *     ) + parent::getConfiguration();
@@ -1291,7 +1291,7 @@ abstract class LiskDAO {
    *
    * @task   hook
    */
-  protected function generatePHID() {
+  public function generatePHID() {
     throw new Exception(
       'To use CONFIG_AUX_PHID, you need to overload '.
       'generatePHID() to perform PHID generation.');

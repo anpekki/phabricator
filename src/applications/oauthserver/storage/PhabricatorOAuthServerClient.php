@@ -2,7 +2,9 @@
 
 final class PhabricatorOAuthServerClient
   extends PhabricatorOAuthServerDAO
-  implements PhabricatorPolicyInterface {
+  implements
+    PhabricatorPolicyInterface,
+    PhabricatorDestructibleInterface {
 
   protected $secret;
   protected $name;
@@ -27,7 +29,7 @@ final class PhabricatorOAuthServerClient
       ->setSecret(Filesystem::readRandomCharacters(32));
   }
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_AUX_PHID => true,
       self::CONFIG_COLUMN_SCHEMA => array(
@@ -89,4 +91,33 @@ final class PhabricatorOAuthServerClient
     return null;
   }
 
+/* -(  PhabricatorDestructibleInterface  )----------------------------------- */
+
+  public function destroyObjectPermanently(
+    PhabricatorDestructionEngine $engine) {
+
+    $this->openTransaction();
+      $this->delete();
+
+      $authorizations = id(new PhabricatorOAuthClientAuthorization())
+        ->loadAllWhere('clientPHID = %s', $this->getPHID());
+      foreach ($authorizations as $authorization) {
+        $authorization->delete();
+      }
+
+      $tokens = id(new PhabricatorOAuthServerAccessToken())
+        ->loadAllWhere('clientPHID = %s', $this->getPHID());
+      foreach ($tokens as $token) {
+        $token->delete();
+      }
+
+      $codes = id(new PhabricatorOAuthServerAuthorizationCode())
+        ->loadAllWhere('clientPHID = %s', $this->getPHID());
+      foreach ($codes as $code) {
+        $code->delete();
+      }
+
+    $this->saveTransaction();
+
+  }
 }
