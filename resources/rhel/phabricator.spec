@@ -158,6 +158,7 @@ fi
 %dir %attr(2750, phabricator, phabricator) /var/lib/phabricator/repo
 %dir %attr(0700, apache, apache) /var/lib/phabricator/files
 %dir %attr(0750, phabricator, phabricator)/var/log/phabricator
+/opt/phacility/GIT-REVS
 
 %files arcanist
 /opt/phacility/arcanist
