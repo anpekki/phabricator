@@ -8,7 +8,7 @@ final class PhabricatorAuthEditController
       AuthManageProvidersCapability::CAPABILITY);
     $viewer = $request->getUser();
     $provider_class = $request->getURIData('className');
-    $config_id = $request->getURIData('configID');
+    $config_id = $request->getURIData('id');
 
     if ($config_id) {
       $config = id(new PhabricatorAuthProviderConfigQuery())
@@ -31,6 +31,8 @@ final class PhabricatorAuthEditController
 
       $is_new = false;
     } else {
+      $provider = null;
+
       $providers = PhabricatorAuthProvider::getAllBaseProviders();
       foreach ($providers as $candidate_provider) {
         if (get_class($candidate_provider) === $provider_class) {
