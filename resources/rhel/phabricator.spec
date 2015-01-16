@@ -19,7 +19,7 @@ BuildArch:      noarch
 Requires(pre):  shadow-utils
 Requires(post): chkconfig
 Requires(preun): chkconfig initscripts
-Requires:       httpd git php php-cli php-mysql php-process php-devel php-gd
+Requires:       httpd git php php-cli php-mysql php-process php-devel php-gd python-pygments
 Requires:       php-pecl-apc php-pecl-json php-mbstring mysql-server
 Requires:       phabricator-arcanist = %{version}-%{release}
 Requires:       phabricator-libphutil = %{version}-%{release}
@@ -126,6 +126,7 @@ if ! [ -e /opt/phacility/phabricator/conf/local/local.json ]; then
   $CFG set repository.default-local-path /var/lib/phabricator/repo
   $CFG set storage.local-disk.path /var/lib/phabricator/files
   $CFG set storage.upload-size-limit 10M
+  $CFG set pygments.enabled true
   $CFG set phabricator.base-uri http://$(hostname -f)/
   $CFG set metamta.default-address phabricator@$(hostname -f)
   $CFG set metamta.domain $(hostname -f)
