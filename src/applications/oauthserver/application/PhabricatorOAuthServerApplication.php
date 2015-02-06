@@ -14,8 +14,8 @@ final class PhabricatorOAuthServerApplication extends PhabricatorApplication {
     return pht('OAuth Login Provider');
   }
 
-  public function getIconName() {
-    return 'oauthserver';
+  public function getFontIcon() {
+    return 'fa-hotel';
   }
 
   public function getTitleGlyph() {

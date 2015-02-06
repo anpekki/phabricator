@@ -90,6 +90,7 @@ final class PhabricatorAuthListController
           pht('Add Authentication Provider'))));
 
     $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->setBorder(true);
     $crumbs->addTextCrumb(pht('Auth Providers'));
 
     $config_name = 'auth.email-domains';
@@ -102,11 +103,11 @@ final class PhabricatorAuthListController
       ),
       $config_name);
 
-    $warning = new AphrontErrorView();
+    $warning = new PHUIErrorView();
 
     $email_domains = PhabricatorEnv::getEnvConfig($config_name);
     if ($email_domains) {
-      $warning->setSeverity(AphrontErrorView::SEVERITY_NOTICE);
+      $warning->setSeverity(PHUIErrorView::SEVERITY_NOTICE);
       $warning->setTitle(pht('Registration is Restricted'));
       $warning->appendChild(
         pht(
@@ -115,7 +116,7 @@ final class PhabricatorAuthListController
           $config_link,
           phutil_tag('strong', array(), implode(', ', $email_domains))));
     } else {
-      $warning->setSeverity(AphrontErrorView::SEVERITY_WARNING);
+      $warning->setSeverity(PHUIErrorView::SEVERITY_WARNING);
       $warning->setTitle(pht('Anyone Can Register an Account'));
       $warning->appendChild(
         pht(
