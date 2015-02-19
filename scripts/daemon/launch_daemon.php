@@ -20,6 +20,11 @@ foreach ($bootloader->getAllLibraries() as $library) {
   $flags[] = '--load-phutil-library='.phutil_get_library_root($library);
 }
 
+$umask_octal = PhabricatorEnv::getEnvConfig('phd.umask');
+if (! empty($umask_octal)) {
+  umask(octdec($umask_octal));
+}
+
 // Add more flags.
 array_splice($argv, 2, 0, $flags);
 
