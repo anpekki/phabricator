@@ -49,6 +49,13 @@ final class PhabricatorPHDConfigOptions
             "of output, but can help debug issues. Daemons launched in debug ".
             "mode with 'phd debug' are always launched in verbose mode. See ".
             "also 'phd.trace'.")),
+      $this->newOption('phd.umask', 'string', null)
+        ->setLocked(true)
+        ->setSummary(pht('Process umask for phd daemons'))
+        ->setDescription(
+          pht(
+            'Specify the phd daemon umask to override systems umask.'.
+            'Examples: 077, 027, 007')),
       $this->newOption('phd.user', 'string', null)
         ->setLocked(true)
         ->setSummary(pht('System user to run daemons as.'))
