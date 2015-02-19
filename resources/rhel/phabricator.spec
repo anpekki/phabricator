@@ -140,6 +140,11 @@ if ! [ -e /opt/phacility/phabricator/conf/local/local.json ]; then
     $(dd if=/dev/urandom bs=128 count=1 2>/dev/null |  base64 | egrep -o '[a-zA-Z0-9]' | head -30 | tr -d '\n')
 fi
 
+# Httpd needs access to the repo folder
+if ! groupmems -g phabricator -l | grep -q apache; then
+  groupmems -g phabricator -a apache
+fi
+
 /sbin/chkconfig --add phabricator
 
 %preun
