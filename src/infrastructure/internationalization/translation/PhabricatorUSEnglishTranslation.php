@@ -1,13 +1,13 @@
 <?php
 
-abstract class PhabricatorBaseEnglishTranslation
-  extends PhabricatorTranslation {
+final class PhabricatorUSEnglishTranslation
+  extends PhutilTranslation {
 
-  final public function getLanguage() {
-    return 'en';
+  public function getLocaleCode() {
+    return 'en_US';
   }
 
-  public function getTranslations() {
+  protected function getTranslations() {
     return array(
       'No daemon(s) with id(s) "%s" exist!' => array(
         'No daemon with id %s exists!',
@@ -409,6 +409,23 @@ abstract class PhabricatorBaseEnglishTranslation
         array(
           '%s removed a subscriber: %3$s.',
           '%s removed subscribers: %3$s.',
+        ),
+      ),
+
+      '%s edited watcher(s), added %s: %s; removed %d: %s.' =>
+        '%s edited watchers, added: %3$s; removed: %5$s.',
+
+      '%s added %s watcher(s): %s.' => array(
+        array(
+          '%s added a watcher: %3$s.',
+          '%s added watchers: %3$s.',
+        ),
+      ),
+
+      '%s removed %s watcher(s): %s.' => array(
+        array(
+          '%s removed a watcher: %3$s.',
+          '%s removed watchers: %3$s.',
         ),
       ),
 

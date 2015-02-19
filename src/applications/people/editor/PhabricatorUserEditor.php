@@ -23,14 +23,25 @@ final class PhabricatorUserEditor extends PhabricatorEditor {
    */
   public function createNewUser(
     PhabricatorUser $user,
-    PhabricatorUserEmail $email) {
+    PhabricatorUserEmail $email,
+    $allow_reassign = false) {
 
     if ($user->getID()) {
       throw new Exception('User has already been created!');
     }
 
+    $is_reassign = false;
     if ($email->getID()) {
-      throw new Exception('Email has already been created!');
+      if ($allow_reassign) {
+        if ($email->getIsPrimary()) {
+          throw new Exception(
+            pht(
+              'Primary email addresses can not be reassigned.'));
+        }
+        $is_reassign = true;
+      } else {
+        throw new Exception('Email has already been created!');
+      }
     }
 
     if (!PhabricatorUser::validateUsername($user->getUsername())) {
@@ -71,7 +82,20 @@ final class PhabricatorUserEditor extends PhabricatorEditor {
       $log->setNewValue($email->getAddress());
       $log->save();
 
+      if ($is_reassign) {
+        $log = PhabricatorUserLog::initializeNewLog(
+          $this->requireActor(),
+          $user->getPHID(),
+          PhabricatorUserLog::ACTION_EMAIL_REASSIGN);
+        $log->setNewValue($email->getAddress());
+        $log->save();
+      }
+
     $user->saveTransaction();
+
+    if ($email->getIsVerified()) {
+      $this->didVerifyEmail($user, $email);
+    }
 
     return $this;
   }
@@ -554,6 +578,8 @@ final class PhabricatorUserEditor extends PhabricatorEditor {
 
       $user->endWriteLocking();
     $user->saveTransaction();
+
+    $this->didVerifyEmail($user, $email);
   }
 
 
@@ -653,5 +679,21 @@ final class PhabricatorUserEditor extends PhabricatorEditor {
         PhabricatorAuthSessionEngine::PASSWORD_TEMPORARY_TOKEN_TYPE,
       ));
   }
+
+  private function didVerifyEmail(
+    PhabricatorUser $user,
+    PhabricatorUserEmail $email) {
+
+    $event_type = PhabricatorEventType::TYPE_AUTH_DIDVERIFYEMAIL;
+    $event_data = array(
+      'user' => $user,
+      'email' => $email,
+    );
+
+    $event = id(new PhabricatorEvent($event_type, $event_data))
+      ->setUser($user);
+    PhutilEventEngine::dispatchEvent($event);
+  }
+
 
 }
