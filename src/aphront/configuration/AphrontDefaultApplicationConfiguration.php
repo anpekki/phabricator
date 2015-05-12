@@ -135,7 +135,9 @@ class AphrontDefaultApplicationConfiguration
         ->addCancelButton($ex->getCancelURI())
         ->addSubmitButton(pht('Enter High Security'));
 
-      foreach ($request->getPassthroughRequestParameters() as $key => $value) {
+      $request_parameters = $request->getPassthroughRequestParameters(
+        $respect_quicksand = true);
+      foreach ($request_parameters as $key => $value) {
         $dialog->addHiddenInput($key, $value);
       }
 
@@ -205,7 +207,7 @@ class AphrontDefaultApplicationConfiguration
     }
 
     if ($ex instanceof AphrontUsageException) {
-      $error = new PHUIErrorView();
+      $error = new PHUIInfoView();
       $error->setTitle($ex->getTitle());
       $error->appendChild($ex->getMessage());
 

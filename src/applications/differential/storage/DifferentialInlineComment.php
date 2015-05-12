@@ -5,6 +5,7 @@ final class DifferentialInlineComment
 
   private $proxy;
   private $syntheticAuthor;
+  private $isGhost;
 
   public function __construct() {
     $this->proxy = new DifferentialTransactionComment();
@@ -188,6 +189,57 @@ final class DifferentialInlineComment
         DifferentialRevisionPHIDType::TYPECONST));
     return $this;
   }
+
+  public function setReplyToCommentPHID($phid) {
+    $this->proxy->setReplyToCommentPHID($phid);
+    return $this;
+  }
+
+  public function getReplyToCommentPHID() {
+    return $this->proxy->getReplyToCommentPHID();
+  }
+
+  public function setHasReplies($has_replies) {
+    $this->proxy->setHasReplies($has_replies);
+    return $this;
+  }
+
+  public function getHasReplies() {
+    return $this->proxy->getHasReplies();
+  }
+
+  public function setIsDeleted($is_deleted) {
+    $this->proxy->setIsDeleted($is_deleted);
+    return $this;
+  }
+
+  public function getIsDeleted() {
+    return $this->proxy->getIsDeleted();
+  }
+
+  public function setFixedState($state) {
+    $this->proxy->setFixedState($state);
+    return $this;
+  }
+
+  public function getFixedState() {
+    return $this->proxy->getFixedState();
+  }
+
+  public function setIsGhost($is_ghost) {
+    $this->isGhost = $is_ghost;
+    return $this;
+  }
+
+  public function getIsGhost() {
+    return $this->isGhost;
+  }
+
+  public function makeEphemeral() {
+    $this->proxy->makeEphemeral();
+    return $this;
+  }
+
 
 /* -(  PhabricatorMarkupInterface Implementation  )-------------------------- */
 

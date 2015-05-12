@@ -28,7 +28,11 @@ final class PhabricatorEmbedFileRemarkupRule
     return $objects;
   }
 
-  protected function renderObjectEmbed($object, $handle, $options) {
+  protected function renderObjectEmbed(
+    $object,
+    PhabricatorObjectHandle $handle,
+    $options) {
+
     $options = $this->getFileOptions($options) + array(
       'name' => $object->getName(),
     );
@@ -96,6 +100,8 @@ final class PhabricatorEmbedFileRemarkupRule
         case 'full':
           $attrs += array(
             'src' => $file->getBestURI(),
+            'height' => $file->getImageHeight(),
+            'width' => $file->getImageWidth(),
           );
           $image_class = 'phabricator-remarkup-embed-image-full';
           break;

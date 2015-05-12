@@ -30,7 +30,9 @@ abstract class PhabricatorRepositoryCommitMessageParserWorker
 
     if (empty($refs_raw['data'])) {
       throw new Exception(
-        pht('Unable to retrieve details for commit "%s"!'));
+        pht(
+          'Unable to retrieve details for commit "%s"!',
+          $commit->getPHID()));
     }
 
     $ref = DiffusionCommitRef::newFromConduitResult(head($refs_raw['data']));
@@ -121,7 +123,7 @@ abstract class PhabricatorRepositoryCommitMessageParserWorker
 
     $force_autoclose = idx($this->getTaskData(), 'forceAutoclose', false);
     if ($force_autoclose) {
-      $autoclose_reason = $repository::BECAUSE_AUTOCLOSE_FORCED;
+      $autoclose_reason = PhabricatorRepository::BECAUSE_AUTOCLOSE_FORCED;
     } else {
       $autoclose_reason = $repository->shouldSkipAutocloseCommit($commit);
     }

@@ -13,17 +13,14 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
     return pht('Conpherence Threads');
   }
 
-  public static function createConpherence(
+  public static function createThread(
     PhabricatorUser $creator,
     array $participant_phids,
     $title,
     $message,
     PhabricatorContentSource $source) {
 
-    $conpherence = id(new ConpherenceThread())
-      ->attachParticipants(array())
-      ->attachFilePHIDs(array())
-      ->setMessageCount(0);
+    $conpherence = ConpherenceThread::initializeNewThread($creator);
     $files = array();
     $errors = array();
     if (empty($participant_phids)) {
@@ -31,8 +28,6 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
     } else {
       $participant_phids[] = $creator->getPHID();
       $participant_phids = array_unique($participant_phids);
-      $conpherence->setRecentParticipantPHIDs(
-        array_slice($participant_phids, 0, 10));
     }
 
     if (empty($message)) {
@@ -64,6 +59,7 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
           ->setTransactionType(ConpherenceTransactionType::TYPE_TITLE)
           ->setNewValue($title);
       }
+
       $xactions[] = id(new ConpherenceTransaction())
         ->setTransactionType(PhabricatorTransactions::TYPE_COMMENT)
         ->attachComment(
@@ -72,11 +68,10 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
           ->setConpherencePHID($conpherence->getPHID()));
 
       id(new ConpherenceEditor())
+        ->setActor($creator)
         ->setContentSource($source)
         ->setContinueOnNoEffect(true)
-        ->setActor($creator)
         ->applyTransactions($conpherence, $xactions);
-
     }
 
     return array($errors, $conpherence);
@@ -125,6 +120,11 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
     $types[] = ConpherenceTransactionType::TYPE_TITLE;
     $types[] = ConpherenceTransactionType::TYPE_PARTICIPANTS;
     $types[] = ConpherenceTransactionType::TYPE_FILES;
+    $types[] = ConpherenceTransactionType::TYPE_PICTURE;
+    $types[] = ConpherenceTransactionType::TYPE_PICTURE_CROP;
+    $types[] = PhabricatorTransactions::TYPE_VIEW_POLICY;
+    $types[] = PhabricatorTransactions::TYPE_EDIT_POLICY;
+    $types[] = PhabricatorTransactions::TYPE_JOIN_POLICY;
 
     return $types;
   }
@@ -136,7 +136,14 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
     switch ($xaction->getTransactionType()) {
       case ConpherenceTransactionType::TYPE_TITLE:
         return $object->getTitle();
+      case ConpherenceTransactionType::TYPE_PICTURE:
+        return $object->getImagePHID(ConpherenceImageData::SIZE_ORIG);
+      case ConpherenceTransactionType::TYPE_PICTURE_CROP:
+        return $object->getImagePHID(ConpherenceImageData::SIZE_CROP);
       case ConpherenceTransactionType::TYPE_PARTICIPANTS:
+        if ($this->getIsNewObject()) {
+          return array();
+        }
         return $object->getParticipantPHIDs();
       case ConpherenceTransactionType::TYPE_FILES:
         return $object->getFilePHIDs();
@@ -149,7 +156,11 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
 
     switch ($xaction->getTransactionType()) {
       case ConpherenceTransactionType::TYPE_TITLE:
+      case ConpherenceTransactionType::TYPE_PICTURE_CROP:
         return $xaction->getNewValue();
+      case ConpherenceTransactionType::TYPE_PICTURE:
+        $file = $xaction->getNewValue();
+        return $file->getPHID();
       case ConpherenceTransactionType::TYPE_PARTICIPANTS:
       case ConpherenceTransactionType::TYPE_FILES:
         return $this->getPHIDTransactionNewValue($xaction);
@@ -177,13 +188,15 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
 
   /**
    * We need to apply initial effects IFF the conpherence is new. We must
-   * save the conpherence first thing to make sure we have an id and a phid.
+   * save the conpherence first thing to make sure we have an id and a phid, as
+   * well as create the initial set of participants so that we pass policy
+   * checks.
    */
   protected function shouldApplyInitialEffects(
     PhabricatorLiskDAO $object,
     array $xactions) {
 
-    return !$object->getID();
+    return $this->getIsNewObject();
   }
 
   protected function applyInitialEffects(
@@ -191,28 +204,19 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
     array $xactions) {
 
     $object->save();
-  }
 
-  protected function applyCustomInternalTransaction(
-    PhabricatorLiskDAO $object,
-    PhabricatorApplicationTransaction $xaction) {
-    switch ($xaction->getTransactionType()) {
-      case PhabricatorTransactions::TYPE_COMMENT:
-        $object->setMessageCount((int)$object->getMessageCount() + 1);
-        break;
-      case ConpherenceTransactionType::TYPE_TITLE:
-        $object->setTitle($xaction->getNewValue());
-        break;
-      case ConpherenceTransactionType::TYPE_PARTICIPANTS:
-        // If this is a new ConpherenceThread, we have to create the
-        // participation data asap to pass policy checks. For existing
-        // ConpherenceThreads, the existing participation is correct
-        // at this stage. Note that later in applyCustomExternalTransaction
-        // this participation data will be updated, particularly the
-        // behindTransactionPHID which is just a generated dummy for now.
-        if ($this->getIsNewObject()) {
+    foreach ($xactions as $xaction) {
+      switch ($xaction->getTransactionType()) {
+        case ConpherenceTransactionType::TYPE_PARTICIPANTS:
+          // Since this is a new ConpherenceThread, we have to create the
+          // participation data asap to pass policy checks. For existing
+          // ConpherenceThreads, the existing participation is correct
+          // at this stage. Note that later in applyCustomExternalTransaction
+          // this participation data will be updated, particularly the
+          // behindTransactionPHID which is just a generated dummy for now.
           $participants = array();
-          foreach ($xaction->getNewValue() as $phid) {
+          $phids = $this->getPHIDTransactionNewValue($xaction, array());
+          foreach ($phids as $phid) {
             if ($phid == $this->getActor()->getPHID()) {
               $status = ConpherenceParticipationStatus::UP_TO_DATE;
               $message_count = 1;
@@ -230,14 +234,69 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
               ->setSeenMessageCount($message_count)
               ->save();
             $object->attachParticipants($participants);
+            $object->setRecentParticipantPHIDs(array_keys($participants));
+          }
+          break;
+      }
+    }
+  }
+
+  protected function applyCustomInternalTransaction(
+    PhabricatorLiskDAO $object,
+    PhabricatorApplicationTransaction $xaction) {
+
+    $make_author_recent_participant = true;
+    switch ($xaction->getTransactionType()) {
+      case PhabricatorTransactions::TYPE_COMMENT:
+        $object->setMessageCount((int)$object->getMessageCount() + 1);
+        break;
+      case ConpherenceTransactionType::TYPE_TITLE:
+        $object->setTitle($xaction->getNewValue());
+        break;
+      case ConpherenceTransactionType::TYPE_PICTURE:
+        $object->setImagePHID(
+          $xaction->getNewValue(),
+          ConpherenceImageData::SIZE_ORIG);
+        break;
+      case ConpherenceTransactionType::TYPE_PICTURE_CROP:
+        $object->setImagePHID(
+          $xaction->getNewValue(),
+          ConpherenceImageData::SIZE_CROP);
+        break;
+      case ConpherenceTransactionType::TYPE_PARTICIPANTS:
+        if (!$this->getIsNewObject()) {
+          $old_map = array_fuse($xaction->getOldValue());
+          $new_map = array_fuse($xaction->getNewValue());
+          // if we added people, add them to the end of "recent" participants
+          $add = array_keys(array_diff_key($new_map, $old_map));
+          // if we remove people, then definintely remove them from "recent"
+          // participants
+          $del = array_keys(array_diff_key($old_map, $new_map));
+          if ($add || $del) {
+            $participants = $object->getRecentParticipantPHIDs();
+            if ($add) {
+              $participants = array_merge($participants, $add);
+            }
+            if ($del) {
+              $participants = array_diff($participants, $del);
+              $actor = $this->requireActor();
+              if (in_array($actor->getPHID(), $del)) {
+                $make_author_recent_participant = false;
+              }
+            }
+            $participants = array_slice(array_unique($participants), 0, 10);
+            $object->setRecentParticipantPHIDs($participants);
           }
         }
         break;
     }
-    $this->updateRecentParticipantPHIDs($object, $xaction);
+
+    if ($make_author_recent_participant) {
+      $this->makeAuthorMostRecentParticipant($object, $xaction);
+    }
   }
 
-  private function updateRecentParticipantPHIDs(
+  private function makeAuthorMostRecentParticipant(
     PhabricatorLiskDAO $object,
     PhabricatorApplicationTransaction $xaction) {
 
@@ -275,6 +334,9 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
         $editor->save();
         break;
       case ConpherenceTransactionType::TYPE_PARTICIPANTS:
+        if ($this->getIsNewObject()) {
+          continue;
+        }
         $participants = $object->getParticipants();
 
         $old_map = array_fuse($xaction->getOldValue());
@@ -289,28 +351,22 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
 
         $add = array_keys(array_diff_key($new_map, $old_map));
         foreach ($add as $phid) {
-          if ($this->getIsNewObject()) {
-            $participants[$phid]
-              ->setBehindTransactionPHID($xaction->getPHID())
-              ->save();
+          if ($phid == $this->getActor()->getPHID()) {
+            $status = ConpherenceParticipationStatus::UP_TO_DATE;
+            $message_count = $object->getMessageCount();
           } else {
-            if ($phid == $this->getActor()->getPHID()) {
-              $status = ConpherenceParticipationStatus::UP_TO_DATE;
-              $message_count = $object->getMessageCount();
-            } else {
-              $status = ConpherenceParticipationStatus::BEHIND;
-              $message_count = 0;
-            }
-            $participants[$phid] =
-              id(new ConpherenceParticipant())
-              ->setConpherencePHID($object->getPHID())
-              ->setParticipantPHID($phid)
-              ->setParticipationStatus($status)
-              ->setDateTouched(time())
-              ->setBehindTransactionPHID($xaction->getPHID())
-              ->setSeenMessageCount($message_count)
-              ->save();
+            $status = ConpherenceParticipationStatus::BEHIND;
+            $message_count = 0;
           }
+          $participants[$phid] =
+            id(new ConpherenceParticipant())
+            ->setConpherencePHID($object->getPHID())
+            ->setParticipantPHID($phid)
+            ->setParticipationStatus($status)
+            ->setDateTouched(time())
+            ->setBehindTransactionPHID($xaction->getPHID())
+            ->setSeenMessageCount($message_count)
+            ->save();
         }
         $object->attachParticipants($participants);
         break;
@@ -320,6 +376,15 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
   protected function applyFinalEffects(
     PhabricatorLiskDAO $object,
     array $xactions) {
+
+    $message_count = 0;
+    foreach ($xactions as $xaction) {
+      switch ($xaction->getTransactionType()) {
+        case PhabricatorTransactions::TYPE_COMMENT:
+          $message_count++;
+          break;
+      }
+    }
 
     // update everyone's participation status on the last xaction -only-
     $xaction = end($xactions);
@@ -333,13 +398,14 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
       if ($phid != $user->getPHID()) {
         if ($participant->getParticipationStatus() != $behind) {
           $participant->setBehindTransactionPHID($xaction_phid);
-          // decrement one as this is the message putting them behind!
-          $participant->setSeenMessageCount($object->getMessageCount() - 1);
+          $participant->setSeenMessageCount(
+            $object->getMessageCount() - $message_count);
         }
         $participant->setParticipationStatus($behind);
         $participant->setDateTouched($time);
       } else {
         $participant->setSeenMessageCount($object->getMessageCount());
+        $participant->setBehindTransactionPHID($xaction_phid);
         $participant->setParticipationStatus($up_to_date);
         $participant->setDateTouched($time);
       }
@@ -358,6 +424,58 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
     }
 
     return $xactions;
+  }
+
+  protected function requireCapabilities(
+    PhabricatorLiskDAO $object,
+    PhabricatorApplicationTransaction $xaction) {
+
+    parent::requireCapabilities($object, $xaction);
+
+    switch ($xaction->getTransactionType()) {
+      case ConpherenceTransactionType::TYPE_PARTICIPANTS:
+        $old_map = array_fuse($xaction->getOldValue());
+        $new_map = array_fuse($xaction->getNewValue());
+
+        $add = array_keys(array_diff_key($new_map, $old_map));
+        $rem = array_keys(array_diff_key($old_map, $new_map));
+
+        $actor_phid = $this->requireActor()->getPHID();
+
+        $is_join = (($add === array($actor_phid)) && !$rem);
+        $is_leave = (($rem === array($actor_phid)) && !$add);
+
+        if ($is_join) {
+          // You need CAN_JOIN to join a thread / room.
+          PhabricatorPolicyFilter::requireCapability(
+            $this->requireActor(),
+            $object,
+            PhabricatorPolicyCapability::CAN_JOIN);
+        } else if ($is_leave) {
+          // You don't need any capabilities to leave a conpherence thread.
+        } else {
+          // You need CAN_EDIT to change participants other than yourself.
+          PhabricatorPolicyFilter::requireCapability(
+            $this->requireActor(),
+            $object,
+            PhabricatorPolicyCapability::CAN_EDIT);
+        }
+        break;
+      // This is similar to PhabricatorTransactions::TYPE_COMMENT so
+      // use CAN_VIEW
+      case ConpherenceTransactionType::TYPE_FILES:
+        PhabricatorPolicyFilter::requireCapability(
+          $this->requireActor(),
+          $object,
+          PhabricatorPolicyCapability::CAN_VIEW);
+        break;
+      case ConpherenceTransactionType::TYPE_TITLE:
+        PhabricatorPolicyFilter::requireCapability(
+          $this->requireActor(),
+          $object,
+          PhabricatorPolicyCapability::CAN_EDIT);
+        break;
+    }
   }
 
   protected function mergeTransactions(
@@ -399,8 +517,8 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
     $phid = $object->getPHID();
 
     return id(new PhabricatorMetaMTAMail())
-      ->setSubject("E{$id}: {$title}")
-      ->addHeader('Thread-Topic', "E{$id}: {$phid}");
+      ->setSubject("Z{$id}: {$title}")
+      ->addHeader('Thread-Topic', "Z{$id}: {$phid}");
   }
 
   protected function getMailTo(PhabricatorLiskDAO $object) {
@@ -443,7 +561,7 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
     $body = parent::buildMailBody($object, $xactions);
     $body->addLinkSection(
       pht('CONPHERENCE DETAIL'),
-      PhabricatorEnv::getProductionURI('/conpherence/'.$object->getID().'/'));
+      PhabricatorEnv::getProductionURI('/'.$object->getMonogram()));
 
     return $body;
   }
@@ -478,4 +596,96 @@ final class ConpherenceEditor extends PhabricatorApplicationTransactionEditor {
     );
   }
 
+  protected function extractFilePHIDsFromCustomTransaction(
+    PhabricatorLiskDAO $object,
+    PhabricatorApplicationTransaction $xaction) {
+
+    switch ($xaction->getTransactionType()) {
+      case ConpherenceTransactionType::TYPE_PICTURE:
+          return array($xaction->getNewValue()->getPHID());
+      case ConpherenceTransactionType::TYPE_PICTURE_CROP:
+          return array($xaction->getNewValue());
+    }
+
+    return parent::extractFilePHIDsFromCustomTransaction($object, $xaction);
+  }
+
+  protected function validateTransaction(
+    PhabricatorLiskDAO $object,
+    $type,
+    array $xactions) {
+
+    $errors = parent::validateTransaction($object, $type, $xactions);
+
+    switch ($type) {
+      case ConpherenceTransactionType::TYPE_TITLE:
+        if (!$object->getIsRoom()) {
+          continue;
+        }
+        $missing = $this->validateIsEmptyTextField(
+          $object->getTitle(),
+          $xactions);
+
+        if ($missing) {
+          if ($object->getIsRoom()) {
+            $detail = pht('Room title is required.');
+          } else {
+            $detail = pht('Thread title can not be blank.');
+          }
+          $error = new PhabricatorApplicationTransactionValidationError(
+            $type,
+            pht('Required'),
+            $detail,
+            last($xactions));
+
+          $error->setIsMissingFieldError(true);
+          $errors[] = $error;
+        }
+        break;
+      case ConpherenceTransactionType::TYPE_PICTURE:
+        foreach ($xactions as $xaction) {
+          $file = $xaction->getNewValue();
+          if (!$file->isTransformableImage()) {
+            $detail = pht('This server only supports these image formats: %s.',
+              implode(', ', PhabricatorFile::getTransformableImageFormats()));
+            $error = new PhabricatorApplicationTransactionValidationError(
+              $type,
+              pht('Invalid'),
+              $detail,
+              last($xactions));
+            $errors[] = $error;
+          }
+        }
+        break;
+      case ConpherenceTransactionType::TYPE_PARTICIPANTS:
+        foreach ($xactions as $xaction) {
+          $new_phids = $this->getPHIDTransactionNewValue($xaction, array());
+          $old_phids = nonempty($object->getParticipantPHIDs(), array());
+          $phids = array_diff($new_phids, $old_phids);
+
+          if (!$phids) {
+            continue;
+          }
+
+          $users = id(new PhabricatorPeopleQuery())
+            ->setViewer($this->requireActor())
+            ->withPHIDs($phids)
+            ->execute();
+          $users = mpull($users, null, 'getPHID');
+          foreach ($phids as $phid) {
+            if (isset($users[$phid])) {
+              continue;
+            }
+            $errors[] = new PhabricatorApplicationTransactionValidationError(
+              $type,
+              pht('Invalid'),
+              pht('New thread member "%s" is not a valid user.', $phid),
+              $xaction);
+          }
+        }
+        break;
+    }
+
+    return $errors;
+  }
 }

@@ -12,7 +12,7 @@ final class DiffusionMergedCommitsQueryConduitAPIMethod
       'Merged commit information for a specific commit in a repository.';
   }
 
-  public function defineReturnType() {
+  protected function defineReturnType() {
     return 'array';
   }
 
@@ -24,7 +24,8 @@ final class DiffusionMergedCommitsQueryConduitAPIMethod
   }
 
   private function getLimit(ConduitAPIRequest $request) {
-    return $request->getValue('limit', PHP_INT_MAX);
+    // TODO: Paginate this sensibly at some point.
+    return $request->getValue('limit', 4096);
   }
 
   protected function getGitResult(ConduitAPIRequest $request) {

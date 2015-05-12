@@ -90,13 +90,27 @@ final class DifferentialRevisionViewController extends DifferentialController {
         $repository);
     }
 
+    $map = $vs_map;
+    if (!$map) {
+      $map = array_fill_keys(array_keys($changesets), 0);
+    }
+
+    $old_ids = array();
+    $new_ids = array();
+    foreach ($map as $id => $vs) {
+      if ($vs <= 0) {
+        $old_ids[] = $id;
+        $new_ids[] = $id;
+      } else {
+        $new_ids[] = $id;
+        $new_ids[] = $vs;
+      }
+    }
+
     $props = id(new DifferentialDiffProperty())->loadAllWhere(
       'diffID = %d',
       $target_manual->getID());
     $props = mpull($props, 'getData', 'getName');
-
-    $all_changesets = $changesets;
-    $inlines = $revision->loadInlineComments($all_changesets);
 
     $object_phids = array_merge(
       $revision->getReviewers(),
@@ -137,9 +151,9 @@ final class DifferentialRevisionViewController extends DifferentialController {
     $large = $request->getStr('large');
     if (count($changesets) > $limit && !$large) {
       $count = count($changesets);
-      $warning = new PHUIErrorView();
+      $warning = new PHUIInfoView();
       $warning->setTitle('Very Large Diff');
-      $warning->setSeverity(PHUIErrorView::SEVERITY_WARNING);
+      $warning->setSeverity(PHUIInfoView::SEVERITY_WARNING);
       $warning->appendChild(hsprintf(
         '%s <strong>%s</strong>',
         pht(
@@ -157,12 +171,21 @@ final class DifferentialRevisionViewController extends DifferentialController {
           pht('Show All Files Inline'))));
       $warning = $warning->render();
 
-      $my_inlines = id(new DifferentialInlineCommentQuery())
-        ->withDraftComments($user->getPHID(), $this->revisionID)
-        ->execute();
+      $old = array_select_keys($changesets, $old_ids);
+      $new = array_select_keys($changesets, $new_ids);
+
+      $query = id(new DifferentialInlineCommentQuery())
+        ->setViewer($user)
+        ->withRevisionPHIDs(array($revision->getPHID()));
+      $inlines = $query->execute();
+      $inlines = $query->adjustInlinesForChangesets(
+        $inlines,
+        $old,
+        $new,
+        $revision);
 
       $visible_changesets = array();
-      foreach ($inlines + $my_inlines as $inline) {
+      foreach ($inlines as $inline) {
         $changeset_id = $inline->getChangesetID();
         if (isset($changesets[$changeset_id])) {
           $visible_changesets[$changeset_id] = $changesets[$changeset_id];
@@ -258,17 +281,18 @@ final class DifferentialRevisionViewController extends DifferentialController {
       $warning_handle_map,
       $handles);
     if ($revision_warnings) {
-      $revision_warnings = id(new PHUIErrorView())
-        ->setSeverity(PHUIErrorView::SEVERITY_WARNING)
+      $revision_warnings = id(new PHUIInfoView())
+        ->setSeverity(PHUIInfoView::SEVERITY_WARNING)
         ->setErrors($revision_warnings);
-      $revision_detail_box->setErrorView($revision_warnings);
+      $revision_detail_box->setInfoView($revision_warnings);
     }
 
     $comment_view = $this->buildTransactions(
       $revision,
       $diff_vs ? $diffs[$diff_vs] : $target,
       $target,
-      $all_changesets);
+      $old_ids,
+      $new_ids);
 
     if (!$viewer_is_anonymous) {
       $comment_view->setQuoteRef('D'.$revision->getID());
@@ -386,10 +410,10 @@ final class DifferentialRevisionViewController extends DifferentialController {
       $review_warnings = array_mergev($review_warnings);
 
       if ($review_warnings) {
-        $review_warnings_panel = id(new PHUIErrorView())
-          ->setSeverity(PHUIErrorView::SEVERITY_WARNING)
+        $review_warnings_panel = id(new PHUIInfoView())
+          ->setSeverity(PHUIInfoView::SEVERITY_WARNING)
           ->setErrors($review_warnings);
-        $comment_form->setErrorView($review_warnings_panel);
+        $comment_form->setInfoView($review_warnings_panel);
       }
 
       $comment_form->setActions($this->getRevisionCommentActions($revision));
@@ -422,17 +446,43 @@ final class DifferentialRevisionViewController extends DifferentialController {
 
     $page_pane = id(new DifferentialPrimaryPaneView())
       ->setID($pane_id)
-      ->appendChild(array(
-        $comment_view,
-        $diff_history,
-        $warning,
-        $local_view,
-        $toc_view,
-        $other_view,
-        $changeset_view,
-      ));
-    if ($comment_form) {
+      ->appendChild($comment_view);
 
+    $signatures = DifferentialRequiredSignaturesField::loadForRevision(
+      $revision);
+    $missing_signatures = false;
+    foreach ($signatures as $phid => $signed) {
+      if (!$signed) {
+        $missing_signatures = true;
+      }
+    }
+
+    if ($missing_signatures) {
+      $signature_message = id(new PHUIInfoView())
+        ->setErrors(
+          array(
+            array(
+              phutil_tag('strong', array(), pht('Content Hidden:')),
+              ' ',
+              pht(
+                'The content of this revision is hidden until the author has '.
+                'signed all of the required legal agreements.'),
+            ),
+          ));
+      $page_pane->appendChild($signature_message);
+    } else {
+      $page_pane->appendChild(
+        array(
+          $diff_history,
+          $warning,
+          $local_view,
+          $toc_view,
+          $other_view,
+          $changeset_view,
+        ));
+    }
+
+    if ($comment_form) {
       $page_pane->appendChild($comment_form);
     } else {
       // TODO: For now, just use this to get "Login to Comment".
@@ -496,6 +546,13 @@ final class DifferentialRevisionViewController extends DifferentialController {
       ->setIcon('fa-pencil')
       ->setHref("/differential/revision/edit/{$revision_id}/")
       ->setName(pht('Edit Revision'))
+      ->setDisabled(!$can_edit)
+      ->setWorkflow(!$can_edit);
+
+    $actions[] = id(new PhabricatorActionView())
+      ->setIcon('fa-upload')
+      ->setHref("/differential/revision/update/{$revision_id}/")
+      ->setName(pht('Update Diff'))
       ->setDisabled(!$can_edit)
       ->setWorkflow(!$can_edit);
 
@@ -747,10 +804,13 @@ final class DifferentialRevisionViewController extends DifferentialController {
       return array();
     }
 
+    $recent = (PhabricatorTime::getNow() - phutil_units('30 days in seconds'));
+
     $query = id(new DifferentialRevisionQuery())
       ->setViewer($this->getRequest()->getUser())
       ->withStatus(DifferentialRevisionQuery::STATUS_OPEN)
-      ->setOrder(DifferentialRevisionQuery::ORDER_PATH_MODIFIED)
+      ->withUpdatedEpochBetween($recent, null)
+      ->setOrder(DifferentialRevisionQuery::ORDER_MODIFIED)
       ->setLimit(10)
       ->needFlags(true)
       ->needDrafts(true)
@@ -774,20 +834,23 @@ final class DifferentialRevisionViewController extends DifferentialController {
 
   private function renderOtherRevisions(array $revisions) {
     assert_instances_of($revisions, 'DifferentialRevision');
+    $viewer = $this->getViewer();
 
-    $user = $this->getRequest()->getUser();
+    $header = id(new PHUIHeaderView())
+      ->setHeader(pht('Similar Open Revisions'))
+      ->setSubheader(
+        pht('Recently updated open revisions affecting the same files.'));
 
     $view = id(new DifferentialRevisionListView())
+      ->setHeader($header)
       ->setRevisions($revisions)
-      ->setUser($user);
+      ->setUser($viewer);
 
     $phids = $view->getRequiredHandlePHIDs();
     $handles = $this->loadViewerHandles($phids);
     $view->setHandles($handles);
 
-    return id(new PHUIObjectBoxView())
-      ->setHeaderText(pht('Open Revisions Affecting These Files'))
-      ->appendChild($view);
+    return $view;
   }
 
 
@@ -876,7 +939,8 @@ final class DifferentialRevisionViewController extends DifferentialController {
     DifferentialRevision $revision,
     DifferentialDiff $left_diff,
     DifferentialDiff $right_diff,
-    array $changesets) {
+    array $old_ids,
+    array $new_ids) {
 
     $timeline = $this->buildTransactionTimeline(
       $revision,
@@ -885,6 +949,8 @@ final class DifferentialRevisionViewController extends DifferentialController {
       array(
         'left' => $left_diff->getID(),
         'right' => $right_diff->getID(),
+        'old' => implode(',', $old_ids),
+        'new' => implode(',', $new_ids),
       ));
 
     return $timeline;

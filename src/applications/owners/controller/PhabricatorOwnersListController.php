@@ -130,7 +130,7 @@ final class PhabricatorOwnersListController
         }
         $packages = $package->loadAllFromArray($data);
 
-        $header = pht('Owned Packages');
+        $header = pht('Project Packages');
         $nodata = pht('No owned packages');
         break;
       case 'all':
@@ -148,18 +148,12 @@ final class PhabricatorOwnersListController
 
     $filter = new AphrontListFilterView();
 
-    $owners_search_value = array();
-    if ($request->getArr('owner')) {
-      $phids = $request->getArr('owner');
-      $phid = reset($phids);
-      $handles = $this->loadViewerHandles(array($phid));
-      $owners_search_value = array($handles[$phid]);
-    }
+    $owner_phids = $request->getArr('owner');
 
     $callsigns = array('' => pht('(Any Repository)'));
     $repositories = id(new PhabricatorRepositoryQuery())
       ->setViewer($user)
-      ->setOrder(PhabricatorRepositoryQuery::ORDER_CALLSIGN)
+      ->setOrder('callsign')
       ->execute();
     foreach ($repositories as $repository) {
       $callsigns[$repository->getCallsign()] =
@@ -175,13 +169,13 @@ final class PhabricatorOwnersListController
           ->setName('name')
           ->setLabel(pht('Name'))
           ->setValue($request->getStr('name')))
-      ->appendChild(
+      ->appendControl(
         id(new AphrontFormTokenizerControl())
           ->setDatasource(new PhabricatorProjectOrUserDatasource())
           ->setLimit(1)
           ->setName('owner')
           ->setLabel(pht('Owner'))
-          ->setValue($owners_search_value))
+          ->setValue($owner_phids))
       ->appendChild(
         id(new AphrontFormSelectControl())
           ->setName('repository')
@@ -198,15 +192,19 @@ final class PhabricatorOwnersListController
           ->setValue(pht('Search for Packages')));
 
     $filter->appendChild($form);
+    $title = pht('Package Index');
+
+    $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->addTextCrumb($header);
+    $crumbs->setBorder(true);
 
     $nav = $this->buildSideNavView();
+    $nav->appendChild($crumbs);
     $nav->appendChild($filter);
     $nav->appendChild($content);
 
     return $this->buildApplicationPage(
-      array(
-        $nav,
-      ),
+      $nav,
       array(
         'title' => pht('Package Index'),
       ));
@@ -330,10 +328,9 @@ final class PhabricatorOwnersListController
         'narrow',
       ));
 
-    $panel = new AphrontPanelView();
-    $panel->setHeader($header);
+    $panel = new PHUIObjectBoxView();
+    $panel->setHeaderText($header);
     $panel->appendChild($table);
-    $panel->setNoBackground();
 
     return $panel;
   }

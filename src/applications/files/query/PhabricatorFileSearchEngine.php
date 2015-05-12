@@ -25,8 +25,12 @@ final class PhabricatorFileSearchEngine
   }
 
   public function buildQueryFromSavedQuery(PhabricatorSavedQuery $saved) {
-    $query = id(new PhabricatorFileQuery())
-      ->withAuthorPHIDs($saved->getParameter('authorPHIDs', array()));
+    $query = id(new PhabricatorFileQuery());
+
+    $author_phids = $saved->getParameter('authorPHIDs', array());
+    if ($author_phids) {
+      $query->withAuthorPHIDs($author_phids);
+    }
 
     if ($saved->getParameter('explicit')) {
       $query->showOnlyExplicitUploads(true);
@@ -50,21 +54,16 @@ final class PhabricatorFileSearchEngine
     AphrontFormView $form,
     PhabricatorSavedQuery $saved_query) {
 
-    $phids = $saved_query->getParameter('authorPHIDs', array());
-    $author_handles = id(new PhabricatorHandleQuery())
-      ->setViewer($this->requireViewer())
-      ->withPHIDs($phids)
-      ->execute();
-
+    $author_phids = $saved_query->getParameter('authorPHIDs', array());
     $explicit = $saved_query->getParameter('explicit');
 
     $form
-      ->appendChild(
+      ->appendControl(
         id(new AphrontFormTokenizerControl())
           ->setDatasource(new PhabricatorPeopleDatasource())
           ->setName('authors')
           ->setLabel(pht('Authors'))
-          ->setValue($author_handles))
+          ->setValue($author_phids))
       ->appendChild(
         id(new AphrontFormCheckboxControl())
           ->addCheckbox(
@@ -170,6 +169,10 @@ final class PhabricatorFileSearchEngine
       $ttl = $file->getTTL();
       if ($ttl !== null) {
         $item->addIcon('blame', pht('Temporary'));
+      }
+
+      if ($file->getIsPartial()) {
+        $item->addIcon('fa-exclamation-triangle orange', pht('Partial'));
       }
 
       if (isset($highlighted_ids[$id])) {

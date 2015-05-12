@@ -21,16 +21,23 @@ final class PhabricatorConduitAPIController
     $method = $this->method;
 
     $api_request = null;
+    $method_implementation = null;
 
     $log = new PhabricatorConduitMethodCallLog();
     $log->setMethod($method);
     $metadata = array();
+
+    $multimeter = MultimeterControl::getInstance();
+    if ($multimeter) {
+      $multimeter->setEventContext('api.'.$method);
+    }
 
     try {
 
       list($metadata, $params) = $this->decodeConduitParams($request, $method);
 
       $call = new ConduitCall($method, $params);
+      $method_implementation = $call->getMethodImplementation();
 
       $result = null;
 
@@ -146,7 +153,8 @@ final class PhabricatorConduitAPIController
         return $this->buildHumanReadableResponse(
           $method,
           $api_request,
-          $response->toDictionary());
+          $response->toDictionary(),
+          $method_implementation);
       case 'json':
       default:
         return id(new AphrontJSONResponse())
@@ -283,7 +291,8 @@ final class PhabricatorConduitAPIController
             pht(
               'This request originates from outside of the Phabricator '.
               'cluster address range. Requests signed with trusted '.
-              'device keys must originate from within the cluster.'),);
+              'device keys must originate from within the cluster.'),
+          );
         }
 
         $user = PhabricatorUser::getOmnipotentUser();
@@ -384,7 +393,8 @@ final class PhabricatorConduitAPIController
             pht(
               'This request originates from outside of the Phabricator '.
               'cluster address range. Requests signed with cluster API '.
-              'tokens must originate from within the cluster.'),);
+              'tokens must originate from within the cluster.'),
+          );
         }
 
         // Flag this as an intracluster request.
@@ -518,7 +528,8 @@ final class PhabricatorConduitAPIController
   private function buildHumanReadableResponse(
     $method,
     ConduitAPIRequest $request = null,
-    $result = null) {
+    $result = null,
+    ConduitAPIMethod $method_implementation = null) {
 
     $param_rows = array();
     $param_rows[] = array('Method', $this->renderAPIValue($method));
@@ -532,7 +543,6 @@ final class PhabricatorConduitAPIController
     }
 
     $param_table = new AphrontTableView($param_rows);
-    $param_table->setDeviceReadyTable(true);
     $param_table->setColumnClasses(
       array(
         'header',
@@ -548,26 +558,19 @@ final class PhabricatorConduitAPIController
     }
 
     $result_table = new AphrontTableView($result_rows);
-    $result_table->setDeviceReadyTable(true);
     $result_table->setColumnClasses(
       array(
         'header',
         'wide',
       ));
 
-    $param_panel = new AphrontPanelView();
-    $param_panel->setHeader('Method Parameters');
+    $param_panel = new PHUIObjectBoxView();
+    $param_panel->setHeaderText(pht('Method Parameters'));
     $param_panel->appendChild($param_table);
 
-    $result_panel = new AphrontPanelView();
-    $result_panel->setHeader('Method Result');
+    $result_panel = new PHUIObjectBoxView();
+    $result_panel->setHeaderText(pht('Method Result'));
     $result_panel->appendChild($result_table);
-
-    $param_head = id(new PHUIHeaderView())
-      ->setHeader(pht('Method Parameters'));
-
-    $result_head = id(new PHUIHeaderView())
-      ->setHeader(pht('Method Result'));
 
     $method_uri = $this->getApplicationURI('method/'.$method.'/');
 
@@ -575,16 +578,23 @@ final class PhabricatorConduitAPIController
       ->addTextCrumb($method, $method_uri)
       ->addTextCrumb(pht('Call'));
 
+    $example_panel = null;
+    if ($request && $method_implementation) {
+      $params = $request->getAllParameters();
+      $example_panel = $this->renderExampleBox(
+        $method_implementation,
+        $params);
+    }
+
     return $this->buildApplicationPage(
       array(
         $crumbs,
-        $param_head,
-        $param_table,
-        $result_head,
-        $result_table,
+        $param_panel,
+        $result_panel,
+        $example_panel,
       ),
       array(
-        'title' => 'Method Call Result',
+        'title' => pht('Method Call Result'),
       ));
   }
 
@@ -650,12 +660,15 @@ final class PhabricatorConduitAPIController
     // entire param dictionary JSON encoded.
     $params_json = $request->getStr('params');
     if (strlen($params_json)) {
-      $params = json_decode($params_json, true);
-      if (!is_array($params)) {
-        throw new Exception(
-          "Invalid parameter information was passed to method ".
-          "'{$method}', could not decode JSON serialization. Data: ".
-          $params_json);
+      $params = null;
+      try {
+        $params = phutil_json_decode($params_json);
+      } catch (PhutilJSONParserException $ex) {
+        throw new PhutilProxyException(
+          pht(
+            "Invalid parameter information was passed to method '%s'",
+            $method),
+          $ex);
       }
 
       $metadata = idx($params, '__conduit__', array());

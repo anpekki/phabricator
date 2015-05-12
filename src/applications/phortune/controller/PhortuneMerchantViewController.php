@@ -135,11 +135,9 @@ final class PhortuneMerchantViewController
 
     $view->addProperty(pht('Status'), $status_view);
 
-    $this->loadHandles($merchant->getMemberPHIDs());
-
     $view->addProperty(
       pht('Members'),
-      $this->renderHandlesForPHIDs($merchant->getMemberPHIDs()));
+      $viewer->renderHandleList($merchant->getMemberPHIDs()));
 
     $view->invokeWillRenderEvent();
 
@@ -194,6 +192,15 @@ final class PhortuneMerchantViewController
         ->setDisabled(!$can_edit)
         ->setWorkflow(!$can_edit));
 
+
+    $view->addAction(
+      id(new PhabricatorActionView())
+        ->setName(pht('New Invoice'))
+        ->setIcon('fa-fax')
+        ->setHref($this->getApplicationURI("merchant/{$id}/invoice/new/"))
+        ->setDisabled(!$can_edit)
+        ->setWorkflow(!$can_edit));
+
     return $view;
   }
 
@@ -210,6 +217,7 @@ final class PhortuneMerchantViewController
       PhabricatorPolicyCapability::CAN_EDIT);
 
     $provider_list = id(new PHUIObjectItemListView())
+      ->setFlush(true)
       ->setNoDataString(pht('This merchant has no payment providers.'));
 
     foreach ($providers as $provider_config) {

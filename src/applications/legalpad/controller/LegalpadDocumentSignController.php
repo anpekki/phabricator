@@ -6,6 +6,10 @@ final class LegalpadDocumentSignController extends LegalpadController {
     return true;
   }
 
+  public function shouldAllowLegallyNonCompliantUsers() {
+    return true;
+  }
+
   public function handleRequest(AphrontRequest $request) {
     $viewer = $request->getUser();
 
@@ -18,9 +22,13 @@ final class LegalpadDocumentSignController extends LegalpadController {
       return new Aphront404Response();
     }
 
-    list($signer_phid, $signature_data) = $this->readSignerInformation(
+    $information = $this->readSignerInformation(
       $document,
       $request);
+    if ($information instanceof AphrontResponse) {
+      return $information;
+    }
+    list($signer_phid, $signature_data) = $information;
 
     $signature = null;
 
@@ -66,8 +74,8 @@ final class LegalpadDocumentSignController extends LegalpadController {
           // If they aren't logged in, we can't be as sure, so don't show
           // anything.
           if ($viewer->isLoggedIn()) {
-            $signed_status = id(new PHUIErrorView())
-              ->setSeverity(PHUIErrorView::SEVERITY_WARNING)
+            $signed_status = id(new PHUIInfoView())
+              ->setSeverity(PHUIInfoView::SEVERITY_WARNING)
               ->setErrors(
                 array(
                   pht('You have not signed this document yet.'),
@@ -96,8 +104,8 @@ final class LegalpadDocumentSignController extends LegalpadController {
               phabricator_datetime($signed_at, $viewer));
           }
 
-          $signed_status = id(new PHUIErrorView())
-            ->setSeverity(PHUIErrorView::SEVERITY_NOTICE)
+          $signed_status = id(new PHUIInfoView())
+            ->setSeverity(PHUIInfoView::SEVERITY_NOTICE)
             ->setErrors(array($signed_text));
         }
 
@@ -125,8 +133,8 @@ final class LegalpadDocumentSignController extends LegalpadController {
           $login_text = pht(
             'This document requires a corporate signatory. You must log in to '.
             'accept this document on behalf of a company you represent.');
-          $signed_status = id(new PHUIErrorView())
-            ->setSeverity(PHUIErrorView::SEVERITY_WARNING)
+          $signed_status = id(new PHUIInfoView())
+            ->setSeverity(PHUIInfoView::SEVERITY_WARNING)
             ->setErrors(array($login_text));
         }
 
@@ -228,6 +236,9 @@ final class LegalpadDocumentSignController extends LegalpadController {
 
     $header = id(new PHUIHeaderView())
       ->setHeader($title)
+      ->setUser($viewer)
+      ->setPolicyObject($document)
+      ->setEpoch($document->getDateModified())
       ->addActionLink(
         id(new PHUIButtonView())
           ->setTag('a')
@@ -266,7 +277,7 @@ final class LegalpadDocumentSignController extends LegalpadController {
     if (!$has_signed) {
       $error_view = null;
       if ($errors) {
-        $error_view = id(new PHUIErrorView())
+        $error_view = id(new PHUIInfoView())
           ->setErrors($errors);
       }
 

@@ -19,6 +19,7 @@ final class PhabricatorUserPreferences extends PhabricatorUserDAO {
 
   const PREFERENCE_SEARCHBAR_JUMP       = 'searchbar-jump';
   const PREFERENCE_SEARCH_SHORTCUT      = 'search-shortcut';
+  const PREFERENCE_SEARCH_SCOPE = 'search-scope';
 
   const PREFERENCE_DIFFUSION_BLAME      = 'diffusion-blame';
   const PREFERENCE_DIFFUSION_COLOR      = 'diffusion-color';
@@ -28,9 +29,12 @@ final class PhabricatorUserPreferences extends PhabricatorUserDAO {
   const PREFERENCE_APP_TILES            = 'app-tiles';
   const PREFERENCE_APP_PINNED           = 'app-pinned';
 
+  const PREFERENCE_DIFF_UNIFIED         = 'diff-unified';
   const PREFERENCE_DIFF_FILETREE        = 'diff-filetree';
+  const PREFERENCE_DIFF_GHOSTS = 'diff-ghosts';
 
-  const PREFERENCE_CONPH_NOTIFICATIONS  = 'conph-notifications';
+  const PREFERENCE_CONPH_NOTIFICATIONS = 'conph-notifications';
+  const PREFERENCE_CONPHERENCE_COLUMN = 'conpherence-column';
 
   // These are in an unusual order for historic reasons.
   const MAILTAG_PREFERENCE_NOTIFY       = 0;
@@ -97,6 +101,11 @@ final class PhabricatorUserPreferences extends PhabricatorUserDAO {
     }
 
     return $large;
+  }
+
+  public static function filterMonospacedCSSRule($monospaced) {
+    // Prevent the user from doing dangerous things.
+    return preg_replace('/[^a-z0-9 ,".]+/i', '', $monospaced);
   }
 
 }

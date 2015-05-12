@@ -8,6 +8,13 @@ final class PhortuneSubscriptionWorker extends PhabricatorWorker {
     $range = $this->getBillingPeriodRange($subscription);
     list($last_epoch, $next_epoch) = $range;
 
+    $should_invoice = $subscription->shouldInvoiceForBillingPeriod(
+      $last_epoch,
+      $next_epoch);
+    if (!$should_invoice) {
+      return;
+    }
+
     $account = $subscription->getAccount();
     $merchant = $subscription->getMerchant();
 
@@ -20,7 +27,6 @@ final class PhortuneSubscriptionWorker extends PhabricatorWorker {
 
     $cart_implementation = id(new PhortuneSubscriptionCart())
       ->setSubscription($subscription);
-
 
     // TODO: This isn't really ideal. It would be better to use an application
     // actor than the original author of the subscription. In particular, if
@@ -53,7 +59,11 @@ final class PhortuneSubscriptionWorker extends PhabricatorWorker {
       ->setMetadataValue('epoch.end', $next_epoch)
       ->save();
 
-    $cart->setSubscriptionPHID($subscription->getPHID());
+    $cart
+      ->setSubscriptionPHID($subscription->getPHID())
+      ->setIsInvoice(1)
+      ->save();
+
     $cart->activateCart();
 
     try {
@@ -181,7 +191,7 @@ final class PhortuneSubscriptionWorker extends PhabricatorWorker {
       // creation date as the start of the billing period.
       $last_epoch = $subscription->getDateCreated();
     }
-    $this_epoch = idx($data, 'trigger.next-epoch');
+    $this_epoch = idx($data, 'trigger.this-epoch');
 
     if (!$last_epoch || !$this_epoch) {
       throw new PhabricatorWorkerPermanentFailureException(
@@ -196,11 +206,13 @@ final class PhortuneSubscriptionWorker extends PhabricatorWorker {
           'Subscription has invalid billing period.'));
     }
 
-    if (PhabricatorTime::getNow() < $this_epoch) {
-      throw new Exception(
-        pht(
-          'Refusing to generate a subscription invoice for a billing period '.
-          'which ends in the future.'));
+    if (empty($data['manual'])) {
+      if (PhabricatorTime::getNow() < $this_epoch) {
+        throw new Exception(
+          pht(
+            'Refusing to generate a subscription invoice for a billing period '.
+            'which ends in the future.'));
+      }
     }
 
     return array($last_epoch, $this_epoch);

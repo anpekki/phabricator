@@ -43,8 +43,11 @@ final class PhragmentCreateController extends PhragmentController {
         $errors[] = pht('The fragment name can not contain \'/\'.');
       }
 
-      $file = id(new PhabricatorFile())->load($v_fileid);
-      if ($file === null) {
+      $file = id(new PhabricatorFileQuery())
+        ->setViewer($viewer)
+        ->withIDs(array($v_fileid))
+        ->executeOne();
+      if (!$file) {
         $errors[] = pht('The specified file doesn\'t exist.');
       }
 
@@ -64,7 +67,7 @@ final class PhragmentCreateController extends PhragmentController {
         return id(new AphrontRedirectResponse())
           ->setURI('/phragment/browse/'.trim($parent_path.'/'.$v_name, '/'));
       } else {
-        $error_view = id(new PHUIErrorView())
+        $error_view = id(new PHUIInfoView())
           ->setErrors($errors)
           ->setTitle(pht('Errors while creating fragment'));
       }
@@ -115,8 +118,11 @@ final class PhragmentCreateController extends PhragmentController {
 
     $box = id(new PHUIObjectBoxView())
       ->setHeaderText('Create Fragment')
-      ->setValidationException(null)
       ->setForm($form);
+
+    if ($error_view) {
+      $box->setInfoView($error_view);
+    }
 
     return $this->buildApplicationPage(
       array(

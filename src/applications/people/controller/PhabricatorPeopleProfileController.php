@@ -133,7 +133,7 @@ final class PhabricatorPeopleProfileController
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb($name);
 
-    $class = 'PhabricatorManiphestApplication';
+    $class = 'PhabricatorConpherenceApplication';
     if (PhabricatorApplication::isClassInstalledForViewer($class, $viewer)) {
       $href = '/conpherence/new/?participant='.$user->getPHID();
       $image = id(new PHUIIconView())
@@ -157,9 +157,7 @@ final class PhabricatorPeopleProfileController
     $nav->appendChild($object_box);
 
     return $this->buildApplicationPage(
-      array(
-        $nav,
-      ),
+      $nav,
       array(
         'title' => $user->getUsername(),
       ));

@@ -27,22 +27,6 @@ final class PhabricatorDiffusionConfigOptions
         '[Diffusion]')
         ->setDescription(pht('Subject prefix for Diffusion mail.')),
       $this->newOption(
-        'metamta.diffusion.reply-handler-domain',
-        'string',
-        null)
-        ->setLocked(true)
-        ->setDescription(
-          pht(
-            'See {{metamta.maniphest.reply-handler}}. This does the same '.
-            'thing, but affects Diffusion.')),
-      $this->newOption(
-        'metamta.diffusion.reply-handler',
-        'class',
-        'PhabricatorAuditReplyHandler')
-        ->setLocked(true)
-        ->setBaseClass('PhabricatorMailReplyHandler')
-        ->setDescription(pht('Override mail reply handler class.')),
-      $this->newOption(
         'metamta.diffusion.attach-patches',
         'bool',
         false)
@@ -76,7 +60,7 @@ final class PhabricatorDiffusionConfigOptions
           ))
         ->setDescription(pht('Controls whether Author can Close Audits.')),
 
-      $this->newOption('bugtraq.url', 'string', '')
+      $this->newOption('bugtraq.url', 'string', null)
         ->addExample('https://bugs.php.net/%BUGID%', pht('PHP bugs'))
         ->addExample('/%BUGID%', pht('Local Maniphest URL'))
         ->setDescription(pht(

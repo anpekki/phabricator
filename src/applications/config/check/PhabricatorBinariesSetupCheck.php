@@ -107,32 +107,26 @@ final class PhabricatorBinariesSetupCheck extends PhabricatorSetupCheck {
         case PhabricatorRepositoryType::REPOSITORY_TYPE_SVN:
           $minimum_version = '1.5';
           $bad_versions = array(
-            '1.7.1' => pht('This version of Subversion has a bug where '.
-                           '"svn diff -c N" does not work for files added '.
-                           'in rN (Subversion issue #2873), fixed in 1.7.2.'),);
+            '1.7.1' => pht(
+              'This version of Subversion has a bug where `%s` does not work '.
+              'for files added in rN (Subversion issue #2873), fixed in 1.7.2.',
+              'svn diff -c N'),
+          );
           list($err, $stdout, $stderr) = exec_manual('svn --version --quiet');
           $version = trim($stdout);
           break;
         case PhabricatorRepositoryType::REPOSITORY_TYPE_MERCURIAL:
           $minimum_version = '1.9';
           $bad_versions = array(
-            '2.1' => pht('This version of Mercurial returns a bad exit code '.
-                         'after a successful pull.'),
-            '2.2' => pht('This version of Mercurial has a significant memory '.
-                         'leak, fixed in 2.2.1. Pushing fails with this '.
-                         'version as well; see T3046#54922.'),);
-          list($err, $stdout, $stderr) = exec_manual('hg --version --quiet');
-
-          // NOTE: At least on OSX, recent versions of Mercurial report this
-          // string in this format:
-          //
-          //   Mercurial Distributed SCM (version 3.1.1+20140916)
-
-          $matches = null;
-          $pattern = '/^Mercurial Distributed SCM \(version ([\d.]+)/m';
-          if (preg_match($pattern, $stdout, $matches)) {
-            $version = $matches[1];
-          }
+            '2.1' => pht(
+              'This version of Mercurial returns a bad exit code '.
+              'after a successful pull.'),
+            '2.2' => pht(
+              'This version of Mercurial has a significant memory leak, fixed '.
+              'in 2.2.1. Pushing fails with this version as well; see %s.',
+              'T3046#54922'),
+          );
+          $version = PhabricatorRepositoryVersion::getMercurialVersion();
           break;
       }
 

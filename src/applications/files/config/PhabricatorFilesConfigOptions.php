@@ -89,8 +89,14 @@ final class PhabricatorFilesConfigOptions
 
     ) + array_fill_keys(array_keys($image_default), 'fa-file-image-o');
 
+    // NOTE: These options are locked primarily because adding "text/plain"
+    // as an image MIME type increases SSRF vulnerability by allowing users
+    // to load text files from remote servers as "images" (see T6755 for
+    // discussion).
+
     return array(
       $this->newOption('files.viewable-mime-types', 'wild', $viewable_default)
+        ->setLocked(true)
         ->setSummary(
           pht('Configure which MIME types are viewable in the browser.'))
         ->setDescription(
@@ -104,18 +110,21 @@ final class PhabricatorFilesConfigOptions
             'the MIME types they are delivered as when they are viewed in '.
             'the browser.')),
       $this->newOption('files.image-mime-types', 'set', $image_default)
+        ->setLocked(true)
         ->setSummary(pht('Configure which MIME types are images.'))
         ->setDescription(
           pht(
             'List of MIME types which can be used as the `src` for an '.
             '`<img />` tag.')),
       $this->newOption('files.audio-mime-types', 'set', $audio_default)
+        ->setLocked(true)
         ->setSummary(pht('Configure which MIME types are audio.'))
         ->setDescription(
           pht(
             'List of MIME types which can be used to render an '.
             '`<audio />` tag.')),
       $this->newOption('files.icon-mime-types', 'wild', $icon_default)
+        ->setLocked(true)
         ->setSummary(pht('Configure which MIME types map to which icons.'))
         ->setDescription(
           pht(
@@ -147,42 +156,6 @@ final class PhabricatorFilesConfigOptions
             "Set this to a valid Amazon S3 bucket to store files there. You ".
             "must also configure S3 access keys in the 'Amazon Web Services' ".
             "group.")),
-     $this->newOption(
-       'storage.engine-selector',
-       'class',
-       'PhabricatorDefaultFileStorageEngineSelector')
-        ->setBaseClass('PhabricatorFileStorageEngineSelector')
-        ->setSummary(pht('Storage engine selector.'))
-        ->setDescription(
-          pht(
-            'Phabricator uses a storage engine selector to choose which '.
-            'storage engine to use when writing file data. If you add new '.
-            'storage engines or want to provide very custom rules (e.g., '.
-            'write images to one storage engine and other files to a '.
-            'different one), you can provide an alternate implementation '.
-            'here. The default engine will use choose MySQL, Local Disk, and '.
-            'S3, in that order, if they have valid configurations above and '.
-            'a file fits within configured limits.')),
-     $this->newOption('storage.upload-size-limit', 'string', null)
-        ->setSummary(
-          pht('Limit to users in interfaces which allow uploading.'))
-        ->setDescription(
-          pht(
-            "Set the size of the largest file a user may upload. This is ".
-            "used to render text like 'Maximum file size: 10MB' on ".
-            "interfaces where users can upload files, and files larger than ".
-            "this size will be rejected. \n\n".
-            "NOTE: **Setting this to a large size is NOT sufficient to ".
-            "allow users to upload large files. You must also configure a ".
-            "number of other settings.** To configure file upload limits, ".
-            "consult the article 'Configuring File Upload Limits' in the ".
-            "documentation. Once you've configured some limit across all ".
-            "levels of the server, you can set this limit to an appropriate ".
-            "value and the UI will then reflect the actual configured ".
-            "limit.\n\n".
-            "Specify this limit in bytes, or using a 'K', 'M', or 'G' ".
-            "suffix."))
-        ->addExample('10M', pht('Allow Uploads 10MB or Smaller')),
      $this->newOption(
         'metamta.files.public-create-email',
         'string',

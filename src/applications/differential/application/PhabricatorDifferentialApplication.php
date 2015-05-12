@@ -22,8 +22,13 @@ final class PhabricatorDifferentialApplication extends PhabricatorApplication {
     return true;
   }
 
-  public function getHelpURI() {
-    return PhabricatorEnv::getDoclink('Differential User Guide');
+  public function getHelpDocumentationArticles(PhabricatorUser $viewer) {
+    return array(
+      array(
+        'name' => pht('Differential User Guide'),
+        'href' => PhabricatorEnv::getDoclink('Differential User Guide'),
+      ),
+    );
   }
 
   public function getFactObjectsForAnalysis() {
@@ -63,12 +68,16 @@ EOTEXT
           'create/' => 'DifferentialDiffCreateController',
         ),
         'changeset/' => 'DifferentialChangesetViewController',
-        'revision/edit/(?:(?P<id>[1-9]\d*)/)?'
-          => 'DifferentialRevisionEditController',
-        'revision/land/(?:(?P<id>[1-9]\d*))/(?P<strategy>[^/]+)/'
-          => 'DifferentialRevisionLandController',
-        'revision/closedetails/(?P<phid>[^/]+)/'
-          => 'DifferentialRevisionCloseDetailsController',
+        'revision/' => array(
+          'edit/(?:(?P<id>[1-9]\d*)/)?'
+            => 'DifferentialRevisionEditController',
+          'land/(?:(?P<id>[1-9]\d*))/(?P<strategy>[^/]+)/'
+            => 'DifferentialRevisionLandController',
+          'closedetails/(?P<phid>[^/]+)/'
+            => 'DifferentialRevisionCloseDetailsController',
+          'update/(?P<revisionID>[1-9]\d*)/'
+            => 'DifferentialDiffCreateController',
+        ),
         'comment/' => array(
           'preview/(?P<id>[1-9]\d*)/' => 'DifferentialCommentPreviewController',
           'save/(?P<id>[1-9]\d*)/' => 'DifferentialCommentSaveController',
@@ -170,7 +179,8 @@ EOTEXT
       phutil_tag(
         'a',
         array(
-          'href' => $this->getInboundEmailSupportLink(),),
+          'href' => $this->getInboundEmailSupportLink(),
+        ),
         pht('Learn More')));
   }
 
@@ -179,6 +189,25 @@ EOTEXT
       DifferentialDefaultViewCapability::CAPABILITY => array(
         'caption' => pht('Default view policy for newly created revisions.'),
       ),
+    );
+  }
+
+  public function getMailCommandObjects() {
+    return array(
+      'revision' => array(
+        'name' => pht('Email Commands: Revisions'),
+        'header' => pht('Interacting with Differential Revisions'),
+        'object' => new DifferentialRevision(),
+        'summary' => pht(
+          'This page documents the commands you can use to interact with '.
+          'revisions in Differential.'),
+      ),
+    );
+  }
+
+  public function getApplicationSearchDocumentTypes() {
+    return array(
+      DifferentialRevisionPHIDType::TYPECONST,
     );
   }
 

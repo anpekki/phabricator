@@ -126,7 +126,15 @@ final class DiffusionRepositoryEditMainController
 
       $boxes[] = id(new PhabricatorAnchorView())->setAnchorName('mirrors');
 
+      $mirror_info = array();
+      if (PhabricatorEnv::getEnvConfig('phabricator.silent')) {
+        $mirror_info[] = pht(
+          'Phabricator is running in silent mode, so changes will not '.
+          'be pushed to mirrors.');
+      }
+
       $boxes[] = id(new PHUIObjectBoxView())
+        ->setFormErrors($mirror_info)
         ->setHeaderText(pht('Mirrors'))
         ->addPropertyList($mirror_properties);
 
@@ -257,8 +265,7 @@ final class DiffusionRepositoryEditMainController
       $repository->getPHID(),
       PhabricatorProjectObjectHasProjectEdgeType::EDGECONST);
     if ($project_phids) {
-      $this->loadHandles($project_phids);
-      $project_text = $this->renderHandlesForPHIDs($project_phids);
+      $project_text = $viewer->renderHandleList($project_phids);
     } else {
       $project_text = phutil_tag('em', array(), pht('None'));
     }
@@ -538,10 +545,9 @@ final class DiffusionRepositoryEditMainController
 
     $credential_phid = $repository->getCredentialPHID();
     if ($credential_phid) {
-      $this->loadHandles(array($credential_phid));
       $view->addProperty(
         pht('Credential'),
-        $this->getHandle($credential_phid)->renderLink());
+        $viewer->renderHandle($credential_phid));
     }
 
     return $view;
@@ -576,8 +582,7 @@ final class DiffusionRepositoryEditMainController
 
     $service_phid = $repository->getAlmanacServicePHID();
     if ($service_phid) {
-      $handles = $this->loadViewerHandles(array($service_phid));
-      $v_service = $handles[$service_phid]->renderLink();
+      $v_service = $viewer->renderHandle($service_phid);
     } else {
       $v_service = phutil_tag(
         'em',
@@ -963,11 +968,34 @@ final class DiffusionRepositoryEditMainController
     if ($message) {
       switch ($message->getStatusCode()) {
         case PhabricatorRepositoryStatusMessage::CODE_ERROR:
+          $message = $message->getParameter('message');
+
+          $suggestion = null;
+          if (preg_match('/Permission denied \(publickey\)./', $message)) {
+            $suggestion = pht(
+              'Public Key Error: This error usually indicates that the '.
+              'keypair you have configured does not have permission to '.
+              'access the repository.');
+          }
+
+          $message = phutil_escape_html_newlines($message);
+
+          if ($suggestion !== null) {
+            $message = array(
+              phutil_tag('strong', array(), $suggestion),
+              phutil_tag('br'),
+              phutil_tag('br'),
+              phutil_tag('em', array(), pht('Raw Error')),
+              phutil_tag('br'),
+              $message,
+            );
+          }
+
           $view->addItem(
             id(new PHUIStatusItemView())
               ->setIcon(PHUIStatusItemView::ICON_WARNING, 'red')
               ->setTarget(pht('Update Error'))
-              ->setNote($message->getParameter('message')));
+              ->setNote($message));
           return $view;
         case PhabricatorRepositoryStatusMessage::CODE_OKAY:
           $ago = (PhabricatorTime::getNow() - $message->getEpoch());

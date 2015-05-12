@@ -3,10 +3,10 @@
 final class DifferentialTransactionEditor
   extends PhabricatorApplicationTransactionEditor {
 
-  private $heraldEmailPHIDs;
   private $changedPriorToCommitURI;
   private $isCloseByCommit;
   private $repositoryPHIDOverride = false;
+  private $didExpandInlineState = false;
 
   public function getEditorApplicationClass() {
     return 'PhabricatorDifferentialApplication';
@@ -186,6 +186,7 @@ final class DifferentialTransactionEditor
     $status_review = ArcanistDifferentialRevisionStatus::NEEDS_REVIEW;
     $status_revision = ArcanistDifferentialRevisionStatus::NEEDS_REVISION;
     $status_plan = ArcanistDifferentialRevisionStatus::CHANGES_PLANNED;
+    $status_abandoned = ArcanistDifferentialRevisionStatus::ABANDONED;
 
     switch ($xaction->getTransactionType()) {
       case PhabricatorTransactions::TYPE_VIEW_POLICY:
@@ -201,10 +202,14 @@ final class DifferentialTransactionEditor
       case PhabricatorTransactions::TYPE_EDGE:
         return;
       case DifferentialTransaction::TYPE_UPDATE:
-        if (!$this->getIsCloseByCommit() &&
-            (($object->getStatus() == $status_revision) ||
-             ($object->getStatus() == $status_plan))) {
-          $object->setStatus($status_review);
+        if (!$this->getIsCloseByCommit()) {
+          switch ($object->getStatus()) {
+            case $status_revision:
+            case $status_plan:
+            case $status_abandoned:
+              $object->setStatus($status_review);
+              break;
+          }
         }
 
         $diff = $this->requireDiff($xaction->getNewValue());
@@ -249,6 +254,11 @@ final class DifferentialTransactionEditor
           case DifferentialAction::ACTION_CLAIM:
             $object->setAuthorPHID($this->getActingAsPHID());
             return;
+          default:
+            throw new Exception(
+              pht(
+                'Differential action "%s" is not a valid action!',
+                $xaction->getNewValue()));
         }
         break;
     }
@@ -519,6 +529,47 @@ final class DifferentialTransactionEditor
       break;
     }
 
+    if (!$this->didExpandInlineState) {
+      switch ($xaction->getTransactionType()) {
+        case PhabricatorTransactions::TYPE_COMMENT:
+        case DifferentialTransaction::TYPE_ACTION:
+        case DifferentialTransaction::TYPE_UPDATE:
+        case DifferentialTransaction::TYPE_INLINE:
+          $this->didExpandInlineState = true;
+
+          $actor_phid = $this->getActingAsPHID();
+          $actor_is_author = ($object->getAuthorPHID() == $actor_phid);
+          if (!$actor_is_author) {
+            break;
+          }
+
+          $state_map = PhabricatorTransactions::getInlineStateMap();
+
+          $inlines = id(new DifferentialDiffInlineCommentQuery())
+            ->setViewer($this->getActor())
+            ->withRevisionPHIDs(array($object->getPHID()))
+            ->withFixedStates(array_keys($state_map))
+            ->execute();
+
+          if (!$inlines) {
+            break;
+          }
+
+          $old_value = mpull($inlines, 'getFixedState', 'getPHID');
+          $new_value = array();
+          foreach ($old_value as $key => $state) {
+            $new_value[$key] = $state_map[$state];
+          }
+
+          $results[] = id(new DifferentialTransaction())
+            ->setTransactionType(PhabricatorTransactions::TYPE_INLINESTATE)
+            ->setIgnoreOnNoEffect(true)
+            ->setOldValue($old_value)
+            ->setNewValue($new_value);
+          break;
+      }
+    }
+
     return $results;
   }
 
@@ -534,7 +585,12 @@ final class DifferentialTransactionEditor
       case PhabricatorTransactions::TYPE_EDGE:
       case PhabricatorTransactions::TYPE_COMMENT:
       case DifferentialTransaction::TYPE_ACTION:
+        return;
       case DifferentialTransaction::TYPE_INLINE:
+        $reply = $xaction->getComment()->getReplyToComment();
+        if ($reply && !$reply->getHasReplies()) {
+          $reply->setHasReplies(1)->save();
+        }
         return;
       case DifferentialTransaction::TYPE_UPDATE:
         // Now that we're inside the transaction, do a final check.
@@ -558,6 +614,28 @@ final class DifferentialTransactionEditor
     }
 
     return parent::applyCustomExternalTransaction($object, $xaction);
+  }
+
+  protected function applyBuiltinExternalTransaction(
+    PhabricatorLiskDAO $object,
+    PhabricatorApplicationTransaction $xaction) {
+
+    switch ($xaction->getTransactionType()) {
+      case PhabricatorTransactions::TYPE_INLINESTATE:
+        $table = new DifferentialTransactionComment();
+        $conn_w = $table->establishConnection('w');
+        foreach ($xaction->getNewValue() as $phid => $state) {
+          queryfx(
+            $conn_w,
+            'UPDATE %T SET fixedState = %s WHERE phid = %s',
+            $table->getTableName(),
+            $state,
+            $phid);
+        }
+        return;
+    }
+
+    return parent::applyBuiltinExternalTransaction($object, $xaction);
   }
 
   protected function mergeEdgeData($type, array $u, array $v) {
@@ -1072,18 +1150,6 @@ final class DifferentialTransactionEditor
     foreach ($object->getReviewerStatus() as $reviewer) {
       $phids[] = $reviewer->getReviewerPHID();
     }
-    return $phids;
-  }
-
-  protected function getMailCC(PhabricatorLiskDAO $object) {
-    $phids = parent::getMailCC($object);
-
-    if ($this->heraldEmailPHIDs) {
-      foreach ($this->heraldEmailPHIDs as $phid) {
-        $phids[] = $phid;
-      }
-    }
-
     return $phids;
   }
 
@@ -1650,10 +1716,6 @@ final class DifferentialTransactionEditor
             ));
       }
     }
-
-    // Save extra email PHIDs for later.
-    $email_phids = $adapter->getEmailPHIDsAddedByHerald();
-    $this->heraldEmailPHIDs = array_keys($email_phids);
 
     // Apply build plans.
     HarbormasterBuildable::applyBuildPlans(

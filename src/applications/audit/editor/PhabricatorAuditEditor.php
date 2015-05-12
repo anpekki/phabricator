@@ -6,9 +6,10 @@ final class PhabricatorAuditEditor
   const MAX_FILES_SHOWN_IN_EMAIL = 1000;
 
   private $auditReasonMap = array();
-  private $heraldEmailPHIDs = array();
   private $affectedFiles;
   private $rawPatch;
+
+  private $didExpandInlineState;
 
   public function addAuditReason($phid, $reason) {
     if (!isset($this->auditReasonMap[$phid])) {
@@ -52,6 +53,7 @@ final class PhabricatorAuditEditor
 
     $types[] = PhabricatorTransactions::TYPE_COMMENT;
     $types[] = PhabricatorTransactions::TYPE_EDGE;
+    $types[] = PhabricatorTransactions::TYPE_INLINESTATE;
 
     $types[] = PhabricatorAuditTransaction::TYPE_COMMIT;
 
@@ -135,8 +137,13 @@ final class PhabricatorAuditEditor
       case PhabricatorTransactions::TYPE_SUBSCRIBERS:
       case PhabricatorTransactions::TYPE_EDGE:
       case PhabricatorAuditActionConstants::ACTION:
-      case PhabricatorAuditActionConstants::INLINE:
       case PhabricatorAuditTransaction::TYPE_COMMIT:
+        return;
+      case PhabricatorAuditActionConstants::INLINE:
+        $reply = $xaction->getComment()->getReplyToComment();
+        if ($reply && !$reply->getHasReplies()) {
+          $reply->setHasReplies(1)->save();
+        }
         return;
       case PhabricatorAuditActionConstants::ADD_AUDITORS:
         $new = $xaction->getNewValue();
@@ -181,6 +188,28 @@ final class PhabricatorAuditEditor
     }
 
     return parent::applyCustomExternalTransaction($object, $xaction);
+  }
+
+  protected function applyBuiltinExternalTransaction(
+    PhabricatorLiskDAO $object,
+    PhabricatorApplicationTransaction $xaction) {
+
+    switch ($xaction->getTransactionType()) {
+      case PhabricatorTransactions::TYPE_INLINESTATE:
+        $table = new PhabricatorAuditTransactionComment();
+        $conn_w = $table->establishConnection('w');
+        foreach ($xaction->getNewValue() as $phid => $state) {
+          queryfx(
+            $conn_w,
+            'UPDATE %T SET fixedState = %s WHERE phid = %s',
+            $table->getTableName(),
+            $state,
+            $phid);
+        }
+        return;
+    }
+
+    return parent::applyBuiltinExternalTransaction($object, $xaction);
   }
 
   protected function applyFinalEffects(
@@ -339,6 +368,46 @@ final class PhabricatorAuditEditor
       default:
         break;
     }
+
+    if (!$this->didExpandInlineState) {
+      switch ($xaction->getTransactionType()) {
+        case PhabricatorTransactions::TYPE_COMMENT:
+        case PhabricatorAuditActionConstants::ACTION:
+          $this->didExpandInlineState = true;
+
+          $actor_phid = $this->getActingAsPHID();
+          $actor_is_author = ($object->getAuthorPHID() == $actor_phid);
+          if (!$actor_is_author) {
+            break;
+          }
+
+          $state_map = PhabricatorTransactions::getInlineStateMap();
+
+          $inlines = id(new DiffusionDiffInlineCommentQuery())
+            ->setViewer($this->getActor())
+            ->withCommitPHIDs(array($object->getPHID()))
+            ->withFixedStates(array_keys($state_map))
+            ->execute();
+
+          if (!$inlines) {
+            break;
+          }
+
+          $old_value = mpull($inlines, 'getFixedState', 'getPHID');
+          $new_value = array();
+          foreach ($old_value as $key => $state) {
+            $new_value[$key] = $state_map[$state];
+          }
+
+          $xactions[] = id(new PhabricatorAuditTransaction())
+            ->setTransactionType(PhabricatorTransactions::TYPE_INLINESTATE)
+            ->setIgnoreOnNoEffect(true)
+            ->setOldValue($old_value)
+            ->setNewValue($new_value);
+          break;
+      }
+    }
+
     return $xactions;
   }
 
@@ -518,24 +587,8 @@ final class PhabricatorAuditEditor
     return $result;
   }
 
-
-  protected function shouldSendMail(
-    PhabricatorLiskDAO $object,
-    array $xactions) {
-
-    // not every code path loads the repository so tread carefully
-    if ($object->getRepository($assert_attached = false)) {
-      $repository = $object->getRepository();
-      if ($repository->isImporting()) {
-        return false;
-      }
-    }
-    return $this->isCommitMostlyImported($object);
-  }
-
   protected function buildReplyHandler(PhabricatorLiskDAO $object) {
-    $reply_handler = PhabricatorEnv::newObjectFromConfig(
-      'metamta.diffusion.reply-handler');
+    $reply_handler = new PhabricatorAuditReplyHandler();
     $reply_handler->setMailReceiver($object);
     return $reply_handler;
   }
@@ -573,9 +626,6 @@ final class PhabricatorAuditEditor
 
   protected function getMailTo(PhabricatorLiskDAO $object) {
     $phids = array();
-    if ($this->heraldEmailPHIDs) {
-      $phids = $this->heraldEmailPHIDs;
-    }
 
     if ($object->getAuthorPHID()) {
       $phids[] = $object->getAuthorPHID();
@@ -806,14 +856,6 @@ final class PhabricatorAuditEditor
     );
   }
 
-
-
-  protected function shouldPublishFeedStory(
-    PhabricatorLiskDAO $object,
-    array $xactions) {
-    return $this->shouldSendMail($object, $xactions);
-  }
-
   protected function shouldApplyHeraldRules(
     PhabricatorLiskDAO $object,
     array $xactions) {
@@ -822,10 +864,7 @@ final class PhabricatorAuditEditor
       switch ($xaction->getTransactionType()) {
         case PhabricatorAuditTransaction::TYPE_COMMIT:
           $repository = $object->getRepository();
-          if ($repository->isImporting()) {
-            return false;
-          }
-          if ($repository->getDetail('herald-disabled')) {
+          if (!$repository->shouldPublish()) {
             return false;
           }
           return true;
@@ -881,8 +920,6 @@ final class PhabricatorAuditEditor
       ->setTransactionType(PhabricatorTransactions::TYPE_SUBSCRIBERS)
       ->setNewValue($add_ccs);
 
-    $this->heraldEmailPHIDs = $adapter->getEmailPHIDs();
-
     HarbormasterBuildable::applyBuildPlans(
       $object->getPHID(),
       $object->getRepository()->getPHID(),
@@ -915,6 +952,41 @@ final class PhabricatorAuditEditor
     $mask = ($has_message | $has_changes);
 
     return $object->isPartiallyImported($mask);
+  }
+
+
+  private function shouldPublishRepositoryActivity(
+    PhabricatorLiskDAO $object,
+    array $xactions) {
+
+    // not every code path loads the repository so tread carefully
+    // TODO: They should, and then we should simplify this.
+    $repository = $object->getRepository($assert_attached = false);
+    if ($repository != PhabricatorLiskDAO::ATTACHABLE) {
+      if (!$repository->shouldPublish()) {
+        return false;
+      }
+    }
+
+    return $this->isCommitMostlyImported($object);
+  }
+
+  protected function shouldSendMail(
+    PhabricatorLiskDAO $object,
+    array $xactions) {
+    return $this->shouldPublishRepositoryActivity($object, $xactions);
+  }
+
+  protected function shouldEnableMentions(
+    PhabricatorLiskDAO $object,
+    array $xactions) {
+    return $this->shouldPublishRepositoryActivity($object, $xactions);
+  }
+
+  protected function shouldPublishFeedStory(
+    PhabricatorLiskDAO $object,
+    array $xactions) {
+    return $this->shouldPublishRepositoryActivity($object, $xactions);
   }
 
 }

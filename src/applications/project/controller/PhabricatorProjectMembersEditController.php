@@ -88,7 +88,7 @@ final class PhabricatorProjectMembersEditController
       $form = new AphrontFormView();
       $form
         ->setUser($user)
-        ->appendChild(
+        ->appendControl(
           id(new AphrontFormTokenizerControl())
             ->setName('phids')
             ->setLabel(pht('Add Members'))
@@ -110,9 +110,7 @@ final class PhabricatorProjectMembersEditController
     $nav->appendChild($member_list);
 
     return $this->buildApplicationPage(
-      array(
-        $nav,
-      ),
+      $nav,
       array(
         'title' => $title,
       ));

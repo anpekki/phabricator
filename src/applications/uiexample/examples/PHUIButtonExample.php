@@ -14,7 +14,7 @@ final class PHUIButtonExample extends PhabricatorUIExample {
     $request = $this->getRequest();
     $user = $request->getUser();
 
-    $colors = array('', 'green', 'grey', 'black', 'disabled');
+    $colors = array('', 'green', 'grey', 'disabled');
     $sizes = array('', 'small');
     $tags = array('a', 'button');
 
@@ -69,7 +69,6 @@ final class PHUIButtonExample extends PhabricatorUIExample {
    $colors = array(null,
      PHUIButtonView::GREEN,
      PHUIButtonView::GREY,
-     PHUIButtonView::BLACK,
      PHUIButtonView::DISABLED,
     );
    $sizes = array(null, PHUIButtonView::SMALL);
@@ -120,32 +119,44 @@ final class PHUIButtonExample extends PhabricatorUIExample {
         ->addClass(PHUI::MARGIN_SMALL_RIGHT);
     }
 
-    $column2 = array();
+    $layout3 = id(new AphrontMultiColumnView())
+      ->addColumn($column)
+      ->setFluidLayout(true)
+      ->setGutter(AphrontMultiColumnView::GUTTER_MEDIUM);
+
     $icons = array(
       'Subscribe' => 'fa-check-circle bluegrey',
       'Edit' => 'fa-pencil bluegrey',
     );
-    foreach ($icons as $text => $icon) {
-      $image = id(new PHUIIconView())
-          ->setIconFont($icon);
-      $column2[] = id(new PHUIButtonView())
-        ->setTag('a')
-        ->setColor(PHUIButtonView::SIMPLE)
-        ->setIcon($image)
-        ->setText($text)
-        ->addClass(PHUI::MARGIN_SMALL_RIGHT);
+    $colors = array(
+      PHUIButtonView::SIMPLE,
+      PHUIButtonView::SIMPLE_YELLOW,
+      PHUIButtonView::SIMPLE_GREY,
+      PHUIButtonView::SIMPLE_BLUE,
+    );
+    $column = array();
+    foreach ($colors as $color) {
+      foreach ($icons as $text => $icon) {
+        $image = id(new PHUIIconView())
+            ->setIconFont($icon);
+        $column[] = id(new PHUIButtonView())
+          ->setTag('a')
+          ->setColor($color)
+          ->setIcon($image)
+          ->setText($text)
+          ->addClass(PHUI::MARGIN_SMALL_RIGHT);
+      }
     }
 
-    $layout3 = id(new AphrontMultiColumnView())
+    $layout4 = id(new AphrontMultiColumnView())
       ->addColumn($column)
-      ->addColumn($column2)
       ->setFluidLayout(true)
       ->setGutter(AphrontMultiColumnView::GUTTER_MEDIUM);
 
 
     // Baby Got Back Buttons
 
-        $column = array();
+    $column = array();
     $icons = array('Asana', 'Github', 'Facebook', 'Google', 'LDAP');
     foreach ($icons as $icon) {
       $image = id(new PHUIIconView())
@@ -161,7 +172,7 @@ final class PHUIButtonExample extends PhabricatorUIExample {
         ->addClass(PHUI::MARGIN_MEDIUM_RIGHT);
     }
 
-    $layout4 = id(new AphrontMultiColumnView())
+    $layout5 = id(new AphrontMultiColumnView())
       ->addColumn($column)
       ->setFluidLayout(true)
       ->setGutter(AphrontMultiColumnView::GUTTER_MEDIUM);
@@ -179,6 +190,9 @@ final class PHUIButtonExample extends PhabricatorUIExample {
       ->setHeader('Icon Buttons');
 
     $head4 = id(new PHUIHeaderView())
+      ->setHeader('Simple Buttons');
+
+    $head5 = id(new PHUIHeaderView())
       ->setHeader('Big Icon Buttons');
 
     $wrap1 = id(new PHUIBoxView())
@@ -197,8 +211,12 @@ final class PHUIButtonExample extends PhabricatorUIExample {
       ->appendChild($layout4)
       ->addMargin(PHUI::MARGIN_LARGE);
 
+    $wrap5 = id(new PHUIBoxView())
+      ->appendChild($layout5)
+      ->addMargin(PHUI::MARGIN_LARGE);
+
     return array($head1, $wrap1, $head2, $wrap2, $head3, $wrap3,
-      $head4, $wrap4,
+      $head4, $wrap4, $head5, $wrap5,
     );
   }
 }

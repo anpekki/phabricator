@@ -258,7 +258,15 @@ final class HeraldRuleController extends HeraldController {
       $errors[] = pht('Rule must have a name.');
     }
 
-    $data = json_decode($request->getStr('rule'), true);
+    $data = null;
+    try {
+      $data = phutil_json_decode($request->getStr('rule'));
+    } catch (PhutilJSONParserException $ex) {
+      throw new PhutilProxyException(
+        pht('Failed to decode rule data.'),
+        $ex);
+    }
+
     if (!is_array($data) ||
         !$data['conditions'] ||
         !$data['actions']) {
@@ -328,7 +336,6 @@ final class HeraldRuleController extends HeraldController {
         $rule->save();
         $rule->saveConditions($conditions);
         $rule->saveActions($actions);
-        $rule->logEdit($request->getUser()->getPHID(), $edit_action);
       $rule->saveTransaction();
     }
 
@@ -606,9 +613,12 @@ final class HeraldRuleController extends HeraldController {
     );
 
     foreach ($sources as $key => $source) {
+      $source->setViewer($this->getViewer());
+
       $sources[$key] = array(
         'uri' => $source->getDatasourceURI(),
         'placeholder' => $source->getPlaceholderText(),
+        'browseURI' => $source->getBrowseURI(),
       );
     }
 
