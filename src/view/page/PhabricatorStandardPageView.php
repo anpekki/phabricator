@@ -3,7 +3,6 @@
 /**
  * This is a standard Phabricator page with menus, Javelin, DarkConsole, and
  * basic styles.
- *
  */
 final class PhabricatorStandardPageView extends PhabricatorBarePageView {
 
@@ -160,7 +159,9 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView {
     if (!$this->getRequest()) {
       throw new Exception(
         pht(
-          'You must set the Request to render a PhabricatorStandardPageView.'));
+          'You must set the %s to render a %s.',
+          'Request',
+          __CLASS__));
     }
 
     $console = $this->getConsole();

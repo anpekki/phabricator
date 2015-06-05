@@ -487,7 +487,7 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
       default:
         $constant = idx($map, $this->status);
         if (!$constant) {
-          throw new Exception("Unknown status query '{$this->status}'!");
+          throw new Exception(pht("Unknown status query '%s'!", $this->status));
         }
         return qsprintf(
           $conn,
@@ -563,7 +563,7 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
     $fulltext_query->setParameter('types',
       array(ManiphestTaskPHIDType::TYPECONST));
 
-    $engine = PhabricatorSearchEngineSelector::newSelector()->newEngine();
+    $engine = PhabricatorSearchEngine::loadEngine();
     $fulltext_results = $engine->executeSearch($fulltext_query);
 
     if (empty($fulltext_results)) {
@@ -754,7 +754,7 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
     $id = $result->getID();
 
     if ($this->groupBy == self::GROUP_PROJECT) {
-      return rtrim($id.'.'.$result->getGroupByProjectPHID(), '.');;
+      return rtrim($id.'.'.$result->getGroupByProjectPHID(), '.');
     }
 
     return $id;

@@ -4,6 +4,8 @@ final class PhabricatorTaskmasterDaemon extends PhabricatorDaemon {
 
   protected function run() {
     do {
+      PhabricatorCaches::destroyRequestCache();
+
       $tasks = id(new PhabricatorWorkerLeaseQuery())
         ->setLimit(1)
         ->execute();
@@ -15,7 +17,7 @@ final class PhabricatorTaskmasterDaemon extends PhabricatorDaemon {
           $id = $task->getID();
           $class = $task->getTaskClass();
 
-          $this->log("Working on task {$id} ({$class})...");
+          $this->log(pht('Working on task %d (%s)...', $id, $class));
 
           $task = $task->executeTask();
           $ex = $task->getExecutionException();
@@ -33,7 +35,7 @@ final class PhabricatorTaskmasterDaemon extends PhabricatorDaemon {
                 $ex);
             }
           } else {
-            $this->log("Task {$id} complete! Moved to archive.");
+            $this->log(pht('Task %s complete! Moved to archive.', $id));
           }
         }
 
