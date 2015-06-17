@@ -50,10 +50,10 @@ final class PhabricatorCalendarEvent extends PhabricatorCalendarDAO
 
     if ($mode == 'public') {
       $view_policy = PhabricatorPolicies::getMostOpenPolicy();
-    } else if ($mode == 'recurring') {
+    }
+
+    if ($mode == 'recurring') {
       $is_recurring = true;
-    } else {
-      $view_policy = $actor->getPHID();
     }
 
     return id(new PhabricatorCalendarEvent())
@@ -316,7 +316,7 @@ final class PhabricatorCalendarEvent extends PhabricatorCalendarDAO
       case 'monthly':
         return 'month';
       case 'yearly':
-        return 'yearly';
+        return 'year';
       default:
         return 'day';
     }
@@ -347,7 +347,25 @@ final class PhabricatorCalendarEvent extends PhabricatorCalendarDAO
     return $this->isCancelled;
   }
 
+  public function getIsRecurrenceParent() {
+    if ($this->isRecurring && !$this->instanceOfEventPHID) {
+      return true;
+    }
+    return false;
+  }
+
+  public function getIsRecurrenceException() {
+    if ($this->instanceOfEventPHID && !$this->isGhostEvent) {
+      return true;
+    }
+    return false;
+  }
+
   public function getIsParentCancelled() {
+    if ($this->instanceOfEventPHID == null) {
+      return false;
+    }
+
     $recurring_event = $this->getParentEvent();
     if ($recurring_event->getIsCancelled()) {
       return true;

@@ -9,6 +9,10 @@ final class PhabricatorSpacesNamespacePHIDType
     return pht('Space');
   }
 
+  public function getPHIDTypeApplicationClass() {
+    return 'PhabricatorSpacesApplication';
+  }
+
   public function newObject() {
     return new PhabricatorSpacesNamespace();
   }
@@ -28,7 +32,17 @@ final class PhabricatorSpacesNamespacePHIDType
 
     foreach ($handles as $phid => $handle) {
       $namespace = $objects[$phid];
-      $handle->setName($namespace->getNamespaceName());
+
+      $monogram = $namespace->getMonogram();
+      $name = $namespace->getNamespaceName();
+
+      $handle->setName($name);
+      $handle->setFullName(pht('%s %s', $monogram, $name));
+      $handle->setURI('/'.$monogram);
+
+      if ($namespace->getIsArchived()) {
+        $handle->setStatus(PhabricatorObjectHandle::STATUS_CLOSED);
+      }
     }
   }
 

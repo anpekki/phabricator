@@ -15,8 +15,13 @@ final class DivinerBookSearchIndexer extends PhabricatorSearchDocumentIndexer {
       ->setDocumentModified($book->getDateModified());
 
     $doc->addField(
-      PhabricatorSearchField::FIELD_BODY,
+      PhabricatorSearchDocumentFieldType::FIELD_BODY,
       $book->getPreface());
+
+    $this->indexTransactions(
+      $doc,
+      new DivinerLiveBookTransactionQuery(),
+      array($phid));
 
     return $doc;
   }

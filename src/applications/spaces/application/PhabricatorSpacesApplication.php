@@ -15,7 +15,7 @@ final class PhabricatorSpacesApplication extends PhabricatorApplication {
   }
 
   public function getFontIcon() {
-    return 'fa-compass';
+    return 'fa-th-large';
   }
 
   public function getTitleGlyph() {
@@ -38,6 +38,21 @@ final class PhabricatorSpacesApplication extends PhabricatorApplication {
     return true;
   }
 
+  public function getHelpDocumentationArticles(PhabricatorUser $viewer) {
+    return array(
+      array(
+        'name' => pht('Spaces User Guide'),
+        'href' => PhabricatorEnv::getDoclink('Spaces User Guide'),
+      ),
+    );
+  }
+
+  public function getRemarkupRules() {
+    return array(
+      new PhabricatorSpacesRemarkupRule(),
+    );
+  }
+
   public function getRoutes() {
     return array(
       '/S(?P<id>[1-9]\d*)' => 'PhabricatorSpacesViewController',
@@ -45,6 +60,8 @@ final class PhabricatorSpacesApplication extends PhabricatorApplication {
         '(?:query/(?P<queryKey>[^/]+)/)?' => 'PhabricatorSpacesListController',
         'create/' => 'PhabricatorSpacesEditController',
         'edit/(?:(?P<id>\d+)/)?' => 'PhabricatorSpacesEditController',
+        '(?P<action>activate|archive)/(?P<id>\d+)/'
+          => 'PhabricatorSpacesArchiveController',
       ),
     );
   }
@@ -56,10 +73,12 @@ final class PhabricatorSpacesApplication extends PhabricatorApplication {
       ),
       PhabricatorSpacesCapabilityDefaultView::CAPABILITY => array(
         'caption' => pht('Default view policy for newly created spaces.'),
+        'template' => PhabricatorSpacesNamespacePHIDType::TYPECONST,
       ),
       PhabricatorSpacesCapabilityDefaultEdit::CAPABILITY => array(
         'caption' => pht('Default edit policy for newly created spaces.'),
         'default' => PhabricatorPolicies::POLICY_ADMIN,
+        'template' => PhabricatorSpacesNamespacePHIDType::TYPECONST,
       ),
     );
   }

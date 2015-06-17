@@ -9,6 +9,7 @@ final class PhabricatorSpacesNamespaceQuery
   private $ids;
   private $phids;
   private $isDefaultNamespace;
+  private $isArchived;
 
   public function withIDs(array $ids) {
     $this->ids = $ids;
@@ -25,38 +26,32 @@ final class PhabricatorSpacesNamespaceQuery
     return $this;
   }
 
+  public function withIsArchived($archived) {
+    $this->isArchived = $archived;
+    return $this;
+  }
+
   public function getQueryApplicationClass() {
     return 'PhabricatorSpacesApplication';
   }
 
   protected function loadPage() {
-    $table = new PhabricatorSpacesNamespace();
-    $conn_r = $table->establishConnection('r');
-
-    $rows = queryfx_all(
-      $conn_r,
-      'SELECT * FROM %T %Q %Q %Q',
-      $table->getTableName(),
-      $this->buildWhereClause($conn_r),
-      $this->buildOrderClause($conn_r),
-      $this->buildLimitClause($conn_r));
-
-    return $table->loadAllFromArray($rows);
+    return $this->loadStandardPage(new PhabricatorSpacesNamespace());
   }
 
-  protected function buildWhereClause(AphrontDatabaseConnection $conn_r) {
-    $where = array();
+  protected function buildWhereClauseParts(AphrontDatabaseConnection $conn) {
+    $where = parent::buildWhereClauseParts($conn);
 
     if ($this->ids !== null) {
       $where[] = qsprintf(
-        $conn_r,
+        $conn,
         'id IN (%Ld)',
         $this->ids);
     }
 
     if ($this->phids !== null) {
       $where[] = qsprintf(
-        $conn_r,
+        $conn,
         'phid IN (%Ls)',
         $this->phids);
     }
@@ -64,17 +59,23 @@ final class PhabricatorSpacesNamespaceQuery
     if ($this->isDefaultNamespace !== null) {
       if ($this->isDefaultNamespace) {
         $where[] = qsprintf(
-          $conn_r,
+          $conn,
           'isDefaultNamespace = 1');
       } else {
         $where[] = qsprintf(
-          $conn_r,
+          $conn,
           'isDefaultNamespace IS NULL');
       }
     }
 
-    $where[] = $this->buildPagingClause($conn_r);
-    return $this->formatWhereClause($where);
+    if ($this->isArchived !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'isArchived = %d',
+        (int)$this->isArchived);
+    }
+
+    return $where;
   }
 
   public static function destroySpacesCache() {
@@ -84,6 +85,21 @@ final class PhabricatorSpacesNamespaceQuery
         self::KEY_ALL,
         self::KEY_DEFAULT,
       ));
+  }
+
+  public static function getSpacesExist() {
+    return (bool)self::getAllSpaces();
+  }
+
+  public static function getViewerSpacesExist(PhabricatorUser $viewer) {
+    if (!self::getSpacesExist()) {
+      return false;
+    }
+
+    // If the viewer has access to only one space, pretend spaces simply don't
+    // exist.
+    $spaces = self::getViewerSpaces($viewer);
+    return (count($spaces) > 1);
   }
 
   public static function getAllSpaces() {
@@ -139,6 +155,75 @@ final class PhabricatorSpacesNamespaceQuery
     }
 
     return $result;
+  }
+
+
+  public static function getViewerActiveSpaces(PhabricatorUser $viewer) {
+    $spaces = self::getViewerSpaces($viewer);
+
+    foreach ($spaces as $key => $space) {
+      if ($space->getIsArchived()) {
+        unset($spaces[$key]);
+      }
+    }
+
+    return $spaces;
+  }
+
+  public static function getSpaceOptionsForViewer(
+    PhabricatorUser $viewer,
+    $space_phid) {
+
+    $viewer_spaces = self::getViewerSpaces($viewer);
+
+    $map = array();
+    foreach ($viewer_spaces as $space) {
+
+      // Skip archived spaces, unless the object is already in that space.
+      if ($space->getIsArchived()) {
+        if ($space->getPHID() != $space_phid) {
+          continue;
+        }
+      }
+
+      $map[$space->getPHID()] = pht(
+        'Space %s: %s',
+        $space->getMonogram(),
+        $space->getNamespaceName());
+    }
+    asort($map);
+
+    return $map;
+  }
+
+
+  /**
+   * Get the Space PHID for an object, if one exists.
+   *
+   * This is intended to simplify performing a bunch of redundant checks; you
+   * can intentionally pass any value in (including `null`).
+   *
+   * @param wild
+   * @return phid|null
+   */
+  public static function getObjectSpacePHID($object) {
+    if (!$object) {
+      return null;
+    }
+
+    if (!($object instanceof PhabricatorSpacesInterface)) {
+      return null;
+    }
+
+    $space_phid = $object->getSpacePHID();
+    if ($space_phid === null) {
+      $default_space = self::getDefaultSpace();
+      if ($default_space) {
+        $space_phid = $default_space->getPHID();
+      }
+    }
+
+    return $space_phid;
   }
 
 }

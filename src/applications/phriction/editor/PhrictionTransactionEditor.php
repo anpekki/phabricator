@@ -391,6 +391,10 @@ final class PhrictionTransactionEditor
         pht("A document's content changes."),
       PhrictionTransaction::MAILTAG_DELETE =>
         pht('A document is deleted.'),
+      PhrictionTransaction::MAILTAG_SUBSCRIBERS =>
+        pht('A document\'s subscribers change.'),
+      PhrictionTransaction::MAILTAG_OTHER =>
+        pht('Other document activity not listed above occurs.'),
     );
   }
 
@@ -774,24 +778,6 @@ final class PhrictionTransactionEditor
 
     return id(new PhrictionDocumentHeraldAdapter())
       ->setDocument($object);
-  }
-
-  protected function didApplyHeraldRules(
-    PhabricatorLiskDAO $object,
-    HeraldAdapter $adapter,
-    HeraldTranscript $transcript) {
-
-    $xactions = array();
-
-    $cc_phids = $adapter->getCcPHIDs();
-    if ($cc_phids) {
-      $value = array_fuse($cc_phids);
-      $xactions[] = id(new PhrictionTransaction())
-        ->setTransactionType(PhabricatorTransactions::TYPE_SUBSCRIBERS)
-        ->setNewValue(array('+' => $value));
-    }
-
-    return $xactions;
   }
 
   private function buildNewContentTemplate(

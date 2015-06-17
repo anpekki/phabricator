@@ -13,7 +13,8 @@ final class PhabricatorUser
     PhabricatorPolicyInterface,
     PhabricatorCustomFieldInterface,
     PhabricatorDestructibleInterface,
-    PhabricatorSSHPublicKeyInterface {
+    PhabricatorSSHPublicKeyInterface,
+    PhabricatorApplicationTransactionInterface {
 
   const SESSION_TABLE = 'phabricator_session';
   const NAMETOKEN_TABLE = 'user_nametoken';
@@ -117,10 +118,6 @@ final class PhabricatorUser
   }
 
   public function canEstablishWebSessions() {
-    if (!$this->isUserActivated()) {
-      return false;
-    }
-
     if ($this->getIsMailingList()) {
       return false;
     }
@@ -344,6 +341,12 @@ final class PhabricatorUser
   }
 
   public function getCSRFToken() {
+    if ($this->isOmnipotent()) {
+      // We may end up here when called from the daemons. The omnipotent user
+      // has no meaningful CSRF token, so just return `null`.
+      return null;
+    }
+
     if ($this->csrfSalt === null) {
       $this->csrfSalt = Filesystem::readRandomCharacters(
         self::CSRF_SALT_LENGTH);
@@ -355,7 +358,8 @@ final class PhabricatorUser
     // discussion in T3684.
     $token = $this->getRawCSRFToken();
     $hash = PhabricatorHash::digest($token, $salt);
-    return 'B@'.$salt.substr($hash, 0, self::CSRF_TOKEN_LENGTH);
+    return self::CSRF_BREACH_PREFIX.$salt.substr(
+        $hash, 0, self::CSRF_TOKEN_LENGTH);
   }
 
   public function validateCSRFToken($token) {
@@ -748,6 +752,29 @@ final class PhabricatorUser
     return id(new PhabricatorUser())->loadOneWhere(
       'phid = %s',
       $email->getUserPHID());
+  }
+
+  public function getDefaultSpacePHID() {
+    // TODO: We might let the user switch which space they're "in" later on;
+    // for now just use the global space if one exists.
+
+    // If the viewer has access to the default space, use that.
+    $spaces = PhabricatorSpacesNamespaceQuery::getViewerActiveSpaces($this);
+    foreach ($spaces as $space) {
+      if ($space->getIsDefaultNamespace()) {
+        return $space->getPHID();
+      }
+    }
+
+    // Otherwise, use the space with the lowest ID that they have access to.
+    // This just tends to keep the default stable and predictable over time,
+    // so adding a new space won't change behavior for users.
+    if ($spaces) {
+      $spaces = msort($spaces, 'getID');
+      return head($spaces)->getPHID();
+    }
+
+    return null;
   }
 
 
@@ -1196,6 +1223,28 @@ final class PhabricatorUser
 
   public function getSSHKeyDefaultName() {
     return 'id_rsa_phabricator';
+  }
+
+
+/* -(  PhabricatorApplicationTransactionInterface  )------------------------- */
+
+
+  public function getApplicationTransactionEditor() {
+    return new PhabricatorUserProfileEditor();
+  }
+
+  public function getApplicationTransactionObject() {
+    return $this;
+  }
+
+  public function getApplicationTransactionTemplate() {
+    return new PhabricatorUserTransaction();
+  }
+
+  public function willRenderTimeline(
+    PhabricatorApplicationTransactionView $timeline,
+    AphrontRequest $request) {
+    return $timeline;
   }
 
 }

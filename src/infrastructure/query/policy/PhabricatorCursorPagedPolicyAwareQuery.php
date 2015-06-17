@@ -18,13 +18,14 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
   private $afterID;
   private $beforeID;
   private $applicationSearchConstraints = array();
-  protected $applicationSearchOrders = array();
   private $internalPaging;
   private $orderVector;
+  private $groupVector;
   private $builtinOrder;
   private $edgeLogicConstraints = array();
   private $edgeLogicConstraintsAreValid = false;
   private $spacePHIDs;
+  private $spaceIsArchived;
 
   protected function getPageCursors(array $page) {
     return array(
@@ -76,6 +77,29 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
     return $this->beforeID;
   }
 
+  protected function loadStandardPage(PhabricatorLiskDAO $table) {
+    $rows = $this->loadStandardPageRows($table);
+    return $table->loadAllFromArray($rows);
+  }
+
+  protected function loadStandardPageRows(PhabricatorLiskDAO $table) {
+    $conn = $table->establishConnection('r');
+
+    $rows = queryfx_all(
+      $conn,
+      '%Q FROM %T %Q %Q %Q %Q %Q %Q %Q',
+      $this->buildSelectClause($conn),
+      $table->getTableName(),
+      (string)$this->getPrimaryTableAlias(),
+      $this->buildJoinClause($conn),
+      $this->buildWhereClause($conn),
+      $this->buildGroupClause($conn),
+      $this->buildHavingClause($conn),
+      $this->buildOrderClause($conn),
+      $this->buildLimitClause($conn));
+
+    return $rows;
+  }
 
   /**
    * Get the viewer for making cursor paging queries.
@@ -177,7 +201,7 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
     return null;
   }
 
-  protected function newResultObject() {
+  public function newResultObject() {
     return null;
   }
 
@@ -605,19 +629,40 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
    * @task order
    */
   public function setOrder($order) {
-    $orders = $this->getBuiltinOrders();
+    $aliases = $this->getBuiltinOrderAliasMap();
 
-    if (empty($orders[$order])) {
+    if (empty($aliases[$order])) {
       throw new Exception(
         pht(
           'Query "%s" does not support a builtin order "%s". Supported orders '.
           'are: %s.',
           get_class($this),
           $order,
-          implode(', ', array_keys($orders))));
+          implode(', ', array_keys($aliases))));
     }
 
-    $this->builtinOrder = $order;
+    $this->builtinOrder = $aliases[$order];
+    $this->orderVector = null;
+
+    return $this;
+  }
+
+
+  /**
+   * Set a grouping order to apply before primary result ordering.
+   *
+   * This allows you to preface the query order vector with additional orders,
+   * so you can effect "group by" queries while still respecting "order by".
+   *
+   * This is a high-level method which works alongside @{method:setOrder}. For
+   * lower-level control over order vectors, use @{method:setOrderVector}.
+   *
+   * @param PhabricatorQueryOrderVector|list<string> List of order keys.
+   * @return this
+   * @task order
+   */
+  public function setGroupVector($vector) {
+    $this->groupVector = $vector;
     $this->orderVector = null;
 
     return $this;
@@ -682,6 +727,35 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
     }
 
     return $orders;
+  }
+
+  public function getBuiltinOrderAliasMap() {
+    $orders = $this->getBuiltinOrders();
+
+    $map = array();
+    foreach ($orders as $key => $order) {
+      $keys = array();
+      $keys[] = $key;
+      foreach (idx($order, 'aliases', array()) as $alias) {
+        $keys[] = $alias;
+      }
+
+      foreach ($keys as $alias) {
+        if (isset($map[$alias])) {
+          throw new Exception(
+            pht(
+              'Two builtin orders ("%s" and "%s") define the same key or '.
+              'alias ("%s"). Each order alias and key must be unique and '.
+              'identify a single order.',
+              $key,
+              $map[$alias],
+              $alias));
+        }
+        $map[$alias] = $key;
+      }
+    }
+
+    return $map;
   }
 
 
@@ -768,6 +842,13 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
       } else {
         $vector = $this->getDefaultOrderVector();
       }
+
+      if ($this->groupVector) {
+        $group = PhabricatorQueryOrderVector::newFromVector($this->groupVector);
+        $group->appendVector($vector);
+        $vector = $group;
+      }
+
       $vector = PhabricatorQueryOrderVector::newFromVector($vector);
 
       // We call setOrderVector() here to apply checks to the default vector.
@@ -791,6 +872,15 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
    * @task order
    */
   public function getOrderableColumns() {
+    $cache = PhabricatorCaches::getRequestCache();
+    $class = get_class($this);
+    $cache_key = 'query.orderablecolumns.'.$class;
+
+    $columns = $cache->getKey($cache_key);
+    if ($columns !== null) {
+      return $columns;
+    }
+
     $columns = array(
       'id' => array(
         'table' => $this->getPrimaryTableAlias(),
@@ -821,9 +911,14 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
           'column' => 'indexValue',
           'type' => $index->getIndexValueType(),
           'null' => 'tail',
+          'customfield' => true,
+          'customfield.index.table' => $index->getTableName(),
+          'customfield.index.key' => $digest,
         );
       }
     }
+
+    $cache->setKey($cache_key, $columns);
 
     return $columns;
   }
@@ -990,32 +1085,6 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
       'table' => $index->getTableName(),
       'index' => $index->getIndexKey(),
       'value' => array($min, $max),
-    );
-
-    return $this;
-  }
-
-
-  /**
-   * Order the results by an ApplicationSearch index.
-   *
-   * @param PhabricatorCustomField Field to which the index belongs.
-   * @param PhabricatorCustomFieldIndexStorage Table where the index is stored.
-   * @param bool True to sort ascending.
-   * @return this
-   * @task appsearch
-   */
-  public function withApplicationSearchOrder(
-    PhabricatorCustomField $field,
-    PhabricatorCustomFieldIndexStorage $index,
-    $ascending) {
-
-    $this->applicationSearchOrders[] = array(
-      'key' => $field->getFieldKey(),
-      'type' => $index->getIndexValueType(),
-      'table' => $index->getTableName(),
-      'index' => $index->getIndexKey(),
-      'ascending' => $ascending,
     );
 
     return $this;
@@ -1206,11 +1275,19 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
       }
     }
 
-    foreach ($this->applicationSearchOrders as $key => $order) {
-      $table = $order['table'];
-      $index = $order['index'];
-      $alias = 'appsearch_order_'.$index;
-      $phid_column = $this->getApplicationSearchObjectPHIDColumn();
+    $phid_column = $this->getApplicationSearchObjectPHIDColumn();
+    $orderable = $this->getOrderableColumns();
+
+    $vector = $this->getOrderVector();
+    foreach ($vector as $order) {
+      $spec = $orderable[$order->getOrderKey()];
+      if (empty($spec['customfield'])) {
+        continue;
+      }
+
+      $table = $spec['customfield.index.table'];
+      $alias = $spec['table'];
+      $key = $spec['customfield.index.key'];
 
       $joins[] = qsprintf(
         $conn_r,
@@ -1221,7 +1298,7 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
         $alias,
         $phid_column,
         $alias,
-        $index);
+        $key);
     }
 
     return implode(' ', $joins);
@@ -1657,6 +1734,11 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
     return $this;
   }
 
+  public function withSpaceIsArchived($archived) {
+    $this->spaceIsArchived = $archived;
+    return $this;
+  }
+
 
   /**
    * Constrain the query to include only results in valid Spaces.
@@ -1695,6 +1777,11 @@ abstract class PhabricatorCursorPagedPolicyAwareQuery
       $viewer_spaces = PhabricatorSpacesNamespaceQuery::getViewerSpaces(
         $viewer);
       foreach ($viewer_spaces as $viewer_space) {
+        if ($this->spaceIsArchived !== null) {
+          if ($viewer_space->getIsArchived() != $this->spaceIsArchived) {
+            continue;
+          }
+        }
         $phid = $viewer_space->getPHID();
         $space_phids[$phid] = $phid;
         if ($viewer_space->getIsDefaultNamespace()) {
