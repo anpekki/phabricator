@@ -176,6 +176,10 @@ final class PhabricatorExtraConfigSetupCheck extends PhabricatorSetupCheck {
       'Inbound mail addresses are now configured for each application '.
       'in the Applications tool.');
 
+    $gc_reason = pht(
+      'Garbage collectors are now configured with "%s".',
+      'bin/garbage set-policy');
+
     $ancient_config += array(
       'phid.external-loaders' =>
         pht(
@@ -274,6 +278,20 @@ final class PhabricatorExtraConfigSetupCheck extends PhabricatorSetupCheck {
 
       'security.allow-conduit-act-as-user' => pht(
         'Impersonating users over the API is no longer supported.'),
+
+      'feed.public' => pht('The framable public feed is no longer supported.'),
+
+      'auth.login-message' => pht(
+        'This configuration option has been replaced with a modular '.
+        'handler. See T9346.'),
+
+      'gcdaemon.ttl.herald-transcripts' => $gc_reason,
+      'gcdaemon.ttl.daemon-logs' => $gc_reason,
+      'gcdaemon.ttl.differential-parse-cache' => $gc_reason,
+      'gcdaemon.ttl.markup-cache' => $gc_reason,
+      'gcdaemon.ttl.task-archive' => $gc_reason,
+      'gcdaemon.ttl.general-cache' => $gc_reason,
+      'gcdaemon.ttl.conduit-logs' => $gc_reason,
     );
 
     return $ancient_config;

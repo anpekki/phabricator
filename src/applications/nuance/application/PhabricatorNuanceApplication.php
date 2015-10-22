@@ -38,6 +38,7 @@ final class PhabricatorNuanceApplication extends PhabricatorApplication {
   public function getRoutes() {
     return array(
       '/nuance/' => array(
+        '' => 'NuanceConsoleController',
         'item/' => array(
           'view/(?P<id>[1-9]\d*)/' => 'NuanceItemViewController',
           'edit/(?P<id>[1-9]\d*)/' => 'NuanceItemEditController',
@@ -73,10 +74,12 @@ final class PhabricatorNuanceApplication extends PhabricatorApplication {
       NuanceSourceDefaultViewCapability::CAPABILITY => array(
         'caption' => pht('Default view policy for newly created sources.'),
         'template' => NuanceSourcePHIDType::TYPECONST,
+        'capability' => PhabricatorPolicyCapability::CAN_VIEW,
       ),
       NuanceSourceDefaultEditCapability::CAPABILITY => array(
         'caption' => pht('Default edit policy for newly created sources.'),
         'template' => NuanceSourcePHIDType::TYPECONST,
+        'capability' => PhabricatorPolicyCapability::CAN_EDIT,
       ),
       NuanceSourceManageCapability::CAPABILITY => array(),
     );

@@ -7,6 +7,7 @@ final class DivinerLiveSymbol extends DivinerDAO
     PhabricatorDestructibleInterface {
 
   protected $bookPHID;
+  protected $repositoryPHID;
   protected $context;
   protected $type;
   protected $name;
@@ -22,6 +23,7 @@ final class DivinerLiveSymbol extends DivinerDAO
   protected $isDocumentable = 0;
 
   private $book = self::ATTACHABLE;
+  private $repository = self::ATTACHABLE;
   private $atom = self::ATTACHABLE;
   private $extends = self::ATTACHABLE;
   private $children = self::ATTACHABLE;
@@ -43,6 +45,7 @@ final class DivinerLiveSymbol extends DivinerDAO
         'summary' => 'text?',
         'isDocumentable' => 'bool',
         'nodeHash' => 'text64?',
+        'repositoryPHID' => 'phid?',
       ),
       self::CONFIG_KEY_SCHEMA => array(
         'key_phid' => null,
@@ -94,6 +97,15 @@ final class DivinerLiveSymbol extends DivinerDAO
     return $this;
   }
 
+  public function getRepository() {
+    return $this->assertAttached($this->repository);
+  }
+
+  public function attachRepository(PhabricatorRepository $repository = null) {
+    $this->repository = $repository;
+    return $this;
+  }
+
   public function getAtom() {
     return $this->assertAttached($this->atom);
   }
@@ -138,7 +150,7 @@ final class DivinerLiveSymbol extends DivinerDAO
 
   public function save() {
     // NOTE: The identity hash is just a sanity check because the unique tuple
-    // on this table is way way too long to fit into a normal `UNIQUE KEY`.
+    // on this table is way too long to fit into a normal `UNIQUE KEY`.
     // We don't use it directly, but its existence prevents duplicate records.
 
     if (!$this->identityHash) {

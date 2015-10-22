@@ -64,6 +64,11 @@ final class HarbormasterManagementBuildWorkflow
         pht('Build plan "%s" does not exist.', $plan_id));
     }
 
+    if (!$plan->canRunManually()) {
+      throw new PhutilArgumentUsageException(
+        pht('This build plan can not be run manually.'));
+    }
+
     $console = PhutilConsole::getConsole();
 
     $buildable = HarbormasterBuildable::initializeNewBuildable($viewer)
@@ -84,7 +89,7 @@ final class HarbormasterManagementBuildWorkflow
       PhabricatorEnv::getProductionURI('/B'.$buildable->getID()));
 
     PhabricatorWorker::setRunAllTasksInProcess(true);
-    $buildable->applyPlan($plan);
+    $buildable->applyPlan($plan, array());
 
     $console->writeOut("%s\n", pht('Done.'));
 

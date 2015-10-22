@@ -2,7 +2,9 @@
 
 final class NuanceItem
   extends NuanceDAO
-  implements PhabricatorPolicyInterface {
+  implements
+    PhabricatorPolicyInterface,
+    PhabricatorApplicationTransactionInterface {
 
   const STATUS_OPEN     = 0;
   const STATUS_ASSIGNED = 10;
@@ -15,11 +17,12 @@ final class NuanceItem
   protected $sourceLabel;
   protected $data = array();
   protected $mailKey;
-  protected $dateNuanced;
+  protected $queuePHID;
+
+  private $source = self::ATTACHABLE;
 
   public static function initializeNewItem() {
     return id(new NuanceItem())
-      ->setDateNuanced(time())
       ->setStatus(self::STATUS_OPEN);
   }
 
@@ -34,17 +37,19 @@ final class NuanceItem
         'sourceLabel' => 'text255?',
         'status' => 'uint32',
         'mailKey' => 'bytes20',
-        'dateNuanced' => 'epoch',
       ),
       self::CONFIG_KEY_SCHEMA => array(
         'key_source' => array(
-          'columns' => array('sourcePHID', 'status', 'dateNuanced', 'id'),
+          'columns' => array('sourcePHID', 'status'),
         ),
         'key_owner' => array(
-          'columns' => array('ownerPHID', 'status', 'dateNuanced', 'id'),
+          'columns' => array('ownerPHID', 'status'),
         ),
-        'key_contacter' => array(
-          'columns' => array('requestorPHID', 'status', 'dateNuanced', 'id'),
+        'key_requestor' => array(
+          'columns' => array('requestorPHID', 'status'),
+        ),
+        'key_queue' => array(
+          'columns' => array('queuePHID', 'status'),
         ),
       ),
     ) + parent::getConfiguration();
@@ -140,7 +145,29 @@ final class NuanceItem
       'sourceLabel' => $this->getSourceLabel(),
       'dateCreated' => $this->getDateCreated(),
       'dateModified' => $this->getDateModified(),
-      'dateNuanced' => $this->getDateNuanced(),
     );
   }
+
+
+/* -(  PhabricatorApplicationTransactionInterface  )------------------------- */
+
+
+  public function getApplicationTransactionEditor() {
+    return new NuanceItemEditor();
+  }
+
+  public function getApplicationTransactionObject() {
+    return $this;
+  }
+
+  public function getApplicationTransactionTemplate() {
+    return new NuanceItemTransaction();
+  }
+
+  public function willRenderTimeline(
+    PhabricatorApplicationTransactionView $timeline,
+    AphrontRequest $request) {
+    return $timeline;
+  }
+
 }

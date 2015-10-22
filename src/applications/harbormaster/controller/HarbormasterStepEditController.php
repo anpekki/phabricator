@@ -2,27 +2,22 @@
 
 final class HarbormasterStepEditController extends HarbormasterController {
 
-  private $id;
-  private $planID;
-  private $className;
-
-  public function willProcessRequest(array $data) {
-    $this->id = idx($data, 'id');
-    $this->planID = idx($data, 'plan');
-    $this->className = idx($data, 'class');
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $this->getViewer();
+    $id = $request->getURIData('id');
 
     $this->requireApplicationCapability(
       HarbormasterManagePlansCapability::CAPABILITY);
 
-    if ($this->id) {
+    if ($id) {
       $step = id(new HarbormasterBuildStepQuery())
         ->setViewer($viewer)
-        ->withIDs(array($this->id))
+        ->withIDs(array($id))
+        ->requireCapabilities(
+          array(
+            PhabricatorPolicyCapability::CAN_VIEW,
+            PhabricatorPolicyCapability::CAN_EDIT,
+          ))
         ->executeOne();
       if (!$step) {
         return new Aphront404Response();
@@ -31,23 +26,35 @@ final class HarbormasterStepEditController extends HarbormasterController {
 
       $is_new = false;
     } else {
+      $plan_id = $request->getURIData('plan');
+      $class = $request->getURIData('class');
+
       $plan = id(new HarbormasterBuildPlanQuery())
-          ->setViewer($viewer)
-          ->withIDs(array($this->planID))
-          ->executeOne();
+        ->setViewer($viewer)
+        ->withIDs(array($plan_id))
+        ->requireCapabilities(
+          array(
+            PhabricatorPolicyCapability::CAN_VIEW,
+            PhabricatorPolicyCapability::CAN_EDIT,
+          ))
+        ->executeOne();
       if (!$plan) {
         return new Aphront404Response();
       }
 
-      $impl = HarbormasterBuildStepImplementation::getImplementation(
-        $this->className);
+      $impl = HarbormasterBuildStepImplementation::getImplementation($class);
       if (!$impl) {
+        return new Aphront404Response();
+      }
+
+      if ($impl->shouldRequireAutotargeting()) {
+        // No manual creation of autotarget steps.
         return new Aphront404Response();
       }
 
       $step = HarbormasterBuildStep::initializeNewStep($viewer)
         ->setBuildPlanPHID($plan->getPHID())
-        ->setClassName($this->className);
+        ->setClassName($class);
 
       $is_new = true;
     }
@@ -65,9 +72,9 @@ final class HarbormasterStepEditController extends HarbormasterController {
 
     $e_name = true;
     $v_name = $step->getName();
-    $e_description = true;
+    $e_description = null;
     $v_description = $step->getDescription();
-    $e_depends_on = true;
+    $e_depends_on = null;
     $v_depends_on = $step->getDetail('dependsOn', array());
 
     $errors = array();
@@ -75,9 +82,7 @@ final class HarbormasterStepEditController extends HarbormasterController {
     if ($request->isFormPost()) {
       $e_name = null;
       $v_name = $request->getStr('name');
-      $e_description = null;
       $v_description = $request->getStr('description');
-      $e_depends_on = null;
       $v_depends_on = $request->getArr('dependsOn');
 
       $xactions = $field_list->buildFieldTransactionsFromRequest(
@@ -132,6 +137,12 @@ final class HarbormasterStepEditController extends HarbormasterController {
           ->setError($e_name)
           ->setValue($v_name));
 
+    $form->appendChild(id(new AphrontFormDividerControl()));
+
+    $field_list->appendFieldsToForm($form);
+
+    $form->appendChild(id(new AphrontFormDividerControl()));
+
     $form
       ->appendControl(
         id(new AphrontFormTokenizerControl())
@@ -144,8 +155,6 @@ final class HarbormasterStepEditController extends HarbormasterController {
           ->setLabel(pht('Depends On'))
           ->setError($e_depends_on)
           ->setValue($v_depends_on));
-
-    $field_list->appendFieldsToForm($form);
 
     $form
       ->appendChild(

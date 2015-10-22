@@ -3,25 +3,20 @@
 final class PhabricatorCalendarEventViewController
   extends PhabricatorCalendarController {
 
-  private $id;
-
   public function shouldAllowPublic() {
     return true;
   }
 
-  public function willProcessRequest(array $data) {
-    $this->id = $data['id'];
-  }
-
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
-
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
+    $id = $request->getURIData('id');
     $sequence = $request->getURIData('sequence');
+
+    $timeline = null;
 
     $event = id(new PhabricatorCalendarEventQuery())
       ->setViewer($viewer)
-      ->withIDs(array($this->id))
+      ->withIDs(array($id))
       ->executeOne();
     if (!$event) {
       return new Aphront404Response();
@@ -60,9 +55,11 @@ final class PhabricatorCalendarEventViewController
       $crumbs->addTextCrumb($title, '/E'.$event->getID());
     }
 
-    $timeline = $this->buildTransactionTimeline(
-      $event,
-      new PhabricatorCalendarEventTransactionQuery());
+    if (!$event->getIsGhostEvent()) {
+      $timeline = $this->buildTransactionTimeline(
+        $event,
+        new PhabricatorCalendarEventTransactionQuery());
+    }
 
     $header = $this->buildHeaderView($event);
     $actions = $this->buildActionView($event);
@@ -78,13 +75,19 @@ final class PhabricatorCalendarEventViewController
       ? pht('Add Comment')
       : pht('Add To Plate');
     $draft = PhabricatorDraft::newFromUserAndKey($viewer, $event->getPHID());
+    if ($sequence) {
+      $comment_uri = $this->getApplicationURI(
+        '/event/comment/'.$event->getID().'/'.$sequence.'/');
+    } else {
+      $comment_uri = $this->getApplicationURI(
+        '/event/comment/'.$event->getID().'/');
+    }
     $add_comment_form = id(new PhabricatorApplicationTransactionCommentView())
       ->setUser($viewer)
       ->setObjectPHID($event->getPHID())
       ->setDraft($draft)
       ->setHeaderText($add_comment_header)
-      ->setAction(
-        $this->getApplicationURI('/event/comment/'.$event->getID().'/'))
+      ->setAction($comment_uri)
       ->setSubmitButtonName(pht('Add Comment'));
 
     return $this->buildApplicationPage(
@@ -96,6 +99,7 @@ final class PhabricatorCalendarEventViewController
       ),
       array(
         'title' => $page_title,
+        'pageObjects' => array($event->getPHID()),
       ));
   }
 
@@ -362,10 +366,18 @@ final class PhabricatorCalendarEventViewController
       pht('Icon'),
       $icon_display);
 
-    $properties->addSectionHeader(
-      pht('Description'),
-      PHUIPropertyListView::ICON_SUMMARY);
-    $properties->addTextContent($event->getDescription());
+    if (strlen($event->getDescription())) {
+      $description = PhabricatorMarkupEngine::renderOneObject(
+        id(new PhabricatorMarkupOneOff())->setContent($event->getDescription()),
+        'default',
+        $viewer);
+
+      $properties->addSectionHeader(
+        pht('Description'),
+        PHUIPropertyListView::ICON_SUMMARY);
+
+      $properties->addTextContent($description);
+    }
 
     return $properties;
   }

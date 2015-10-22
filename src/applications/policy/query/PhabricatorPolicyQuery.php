@@ -305,9 +305,9 @@ final class PhabricatorPolicyQuery
   }
 
   public static function getObjectPolicyRules($object) {
-    $rules = id(new PhutilSymbolLoader())
+    $rules = id(new PhutilClassMapQuery())
       ->setAncestorClass('PhabricatorPolicyRule')
-      ->loadObjects();
+      ->execute();
 
     $results = array();
     foreach ($rules as $rule) {
@@ -340,6 +340,47 @@ final class PhabricatorPolicyQuery
     }
 
     return $results;
+  }
+
+  public static function getDefaultPolicyForObject(
+    PhabricatorUser $viewer,
+    PhabricatorPolicyInterface $object,
+    $capability) {
+
+    $phid = $object->getPHID();
+    if (!$phid) {
+      return null;
+    }
+
+    $type = phid_get_type($phid);
+
+    $map = self::getDefaultObjectTypePolicyMap();
+
+    if (empty($map[$type][$capability])) {
+      return null;
+    }
+
+    $policy_phid = $map[$type][$capability];
+
+    return id(new PhabricatorPolicyQuery())
+      ->setViewer($viewer)
+      ->withPHIDs(array($policy_phid))
+      ->executeOne();
+  }
+
+  private static function getDefaultObjectTypePolicyMap() {
+    static $map;
+
+    if ($map === null) {
+      $map = array();
+
+      $apps = PhabricatorApplication::getAllApplications();
+      foreach ($apps as $app) {
+        $map += $app->getDefaultObjectTypePolicyMap();
+      }
+    }
+
+    return $map;
   }
 
 

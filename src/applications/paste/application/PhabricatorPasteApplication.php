@@ -40,6 +40,7 @@ final class PhabricatorPasteApplication extends PhabricatorApplication {
         '(query/(?P<queryKey>[^/]+)/)?' => 'PhabricatorPasteListController',
         'create/' => 'PhabricatorPasteEditController',
         'edit/(?P<id>[1-9]\d*)/' => 'PhabricatorPasteEditController',
+        'raw/(?P<id>[1-9]\d*)/' => 'PhabricatorPasteRawController',
         'comment/(?P<id>[1-9]\d*)/' => 'PhabricatorPasteCommentController',
       ),
     );
@@ -65,10 +66,12 @@ final class PhabricatorPasteApplication extends PhabricatorApplication {
       PasteDefaultViewCapability::CAPABILITY => array(
         'caption' => pht('Default view policy for newly created pastes.'),
         'template' => PhabricatorPastePastePHIDType::TYPECONST,
+        'capability' => PhabricatorPolicyCapability::CAN_VIEW,
       ),
       PasteDefaultEditCapability::CAPABILITY => array(
         'caption' => pht('Default edit policy for newly created pastes.'),
         'template' => PhabricatorPastePastePHIDType::TYPECONST,
+        'capability' => PhabricatorPolicyCapability::CAN_EDIT,
       ),
     );
   }

@@ -177,8 +177,7 @@ final class DiffusionRepositoryController extends DiffusionController {
     $content[] = $this->buildHistoryTable(
       $history_results,
       $history,
-      $history_exception,
-      $handles);
+      $history_exception);
 
     try {
       $content[] = $this->buildTagListTable($drequest);
@@ -227,16 +226,8 @@ final class DiffusionRepositoryController extends DiffusionController {
     $actions = $this->buildActionList($repository);
 
     $view = id(new PHUIPropertyListView())
+      ->setObject($repository)
       ->setUser($user);
-
-    $project_phids = PhabricatorEdgeQuery::loadDestinationPHIDs(
-      $repository->getPHID(),
-      PhabricatorProjectObjectHasProjectEdgeType::EDGECONST);
-    if ($project_phids) {
-      $view->addProperty(
-        pht('Projects'),
-        $user->renderHandleList($project_phids));
-    }
 
     if ($repository->isHosted()) {
       $ssh_uri = $repository->getSSHCloneURIObject();
@@ -290,13 +281,16 @@ final class DiffusionRepositoryController extends DiffusionController {
       }
     }
 
+    $view->invokeWillRenderEvent();
+
     $description = $repository->getDetail('description');
     if (strlen($description)) {
       $description = PhabricatorMarkupEngine::renderOneObject(
         $repository,
         'description',
         $user);
-      $view->addSectionHeader(pht('Description'));
+      $view->addSectionHeader(
+        pht('Description'), PHUIPropertyListView::ICON_SUMMARY);
       $view->addTextContent($description);
     }
 
@@ -308,7 +302,16 @@ final class DiffusionRepositoryController extends DiffusionController {
 
     $info = null;
     $drequest = $this->getDiffusionRequest();
-    if ($drequest->getRefAlternatives()) {
+
+    // Try to load alternatives. This may fail for repositories which have not
+    // cloned yet. If it does, just ignore it and continue.
+    try {
+      $alternatives = $drequest->getRefAlternatives();
+    } catch (ConduitClientException $ex) {
+      $alternatives = array();
+    }
+
+    if ($alternatives) {
       $message = array(
         pht(
           'The ref "%s" is ambiguous in this repository.',
@@ -396,7 +399,7 @@ final class DiffusionRepositoryController extends DiffusionController {
 
     $header->addActionLink($button);
     $panel->setHeader($header);
-    $panel->appendChild($table);
+    $panel->setTable($table);
 
     return $panel;
   }
@@ -469,7 +472,7 @@ final class DiffusionRepositoryController extends DiffusionController {
     $header->addActionLink($button);
 
     $panel->setHeader($header);
-    $panel->appendChild($view);
+    $panel->setTable($view);
 
     return $panel;
   }
@@ -516,8 +519,7 @@ final class DiffusionRepositoryController extends DiffusionController {
   private function buildHistoryTable(
     $history_results,
     $history,
-    $history_exception,
-    array $handles) {
+    $history_exception) {
 
     $request = $this->getRequest();
     $viewer = $request->getUser();
@@ -541,7 +543,6 @@ final class DiffusionRepositoryController extends DiffusionController {
     $history_table = id(new DiffusionHistoryTableView())
       ->setUser($viewer)
       ->setDiffusionRequest($drequest)
-      ->setHandles($handles)
       ->setHistory($history);
 
     // TODO: Super sketchy.
@@ -571,7 +572,7 @@ final class DiffusionRepositoryController extends DiffusionController {
       ->setHeader(pht('Recent Commits'))
       ->addActionLink($button);
     $panel->setHeader($header);
-    $panel->appendChild($history_table);
+    $panel->setTable($history_table);
 
     return $panel;
   }
@@ -628,6 +629,7 @@ final class DiffusionRepositoryController extends DiffusionController {
     $header->addActionLink($button);
     $browse_panel->setHeader($header);
 
+    $locate_panel = null;
     if ($repository->canUsePathTree()) {
       Javelin::initBehavior(
         'diffusion-locate-file',
@@ -652,14 +654,15 @@ final class DiffusionRepositoryController extends DiffusionController {
             ->setID('locate-input')
             ->setLabel(pht('Locate File')));
       $form_box = id(new PHUIBoxView())
-        ->addClass('diffusion-locate-file-view')
         ->appendChild($form->buildLayoutView());
-      $browse_panel->appendChild($form_box);
+      $locate_panel = id(new PHUIObjectBoxView())
+        ->setHeaderText('Locate File')
+        ->appendChild($form_box);
     }
 
-    $browse_panel->appendChild($browse_table);
+    $browse_panel->setTable($browse_table);
 
-    return $browse_panel;
+    return array($locate_panel, $browse_panel);
   }
 
   private function renderCloneCommand(

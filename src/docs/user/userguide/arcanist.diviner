@@ -12,7 +12,7 @@ A detailed command reference is available by running `arc help`. This
 document provides an overview of common workflows and installation.
 
 Arcanist has technical, contributor-focused documentation here:
-<http://www.phabricator.com/docs/arcanist/>
+<https://secure.phabricator.com/book/arcanist/>
 
 = Quick Start =
 
@@ -129,11 +129,6 @@ able to use:
   - Another common approach is to write an install script as an action into
     existing build scripts, so users can run `make install-arc` or
     `ant install-arc` or similar.
-  - In general, if this sucks and is causing you pain, let us know (see
-    @{article:Give Feedback! Get Support!}). We're planning to improve this at
-    some point, but it's somewhat complicated to get right. While it can take a
-    little time to set up, we aren't getting feedback that it's a persistent
-    pain point, so it hasn't been a priority.
 
 == Installing Tab Completion ==
 
@@ -180,4 +175,3 @@ them to get it working.
  - @{article:Arcanist User Guide: Customizing Existing Linters}
  - @{article:Arcanist User Guide: Customizing Lint, Unit Tests and Workflows}
  - @{article:Arcanist User Guide: Code Coverage}
- - @{article:Arcanist User Guide: Repository Hooks}

@@ -7,7 +7,6 @@ final class PhabricatorProjectQuery
   private $phids;
   private $memberPHIDs;
   private $slugs;
-  private $phrictionSlugs;
   private $names;
   private $nameTokens;
   private $icons;
@@ -47,11 +46,6 @@ final class PhabricatorProjectQuery
 
   public function withSlugs(array $slugs) {
     $this->slugs = $slugs;
-    return $this;
-  }
-
-  public function withPhrictionSlugs(array $slugs) {
-    $this->phrictionSlugs = $slugs;
     return $this;
   }
 
@@ -196,12 +190,18 @@ final class PhabricatorProjectQuery
       $default = null;
 
       $file_phids = mpull($projects, 'getProfileImagePHID');
-      $files = id(new PhabricatorFileQuery())
-        ->setParentQuery($this)
-        ->setViewer($this->getViewer())
-        ->withPHIDs($file_phids)
-        ->execute();
-      $files = mpull($files, null, 'getPHID');
+      $file_phids = array_filter($file_phids);
+      if ($file_phids) {
+        $files = id(new PhabricatorFileQuery())
+          ->setParentQuery($this)
+          ->setViewer($this->getViewer())
+          ->withPHIDs($file_phids)
+          ->execute();
+        $files = mpull($files, null, 'getPHID');
+      } else {
+        $files = array();
+      }
+
       foreach ($projects as $project) {
         $file = idx($files, $project->getProfileImagePHID());
         if (!$file) {
@@ -300,13 +300,6 @@ final class PhabricatorProjectQuery
         $conn,
         'slug.slug IN (%Ls)',
         $this->slugs);
-    }
-
-    if ($this->phrictionSlugs !== null) {
-      $where[] = qsprintf(
-        $conn,
-        'phrictionSlug IN (%Ls)',
-        $this->phrictionSlugs);
     }
 
     if ($this->names !== null) {

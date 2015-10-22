@@ -55,16 +55,9 @@ abstract class PhabricatorAuthProvider extends Phobject {
   }
 
   public static function getAllBaseProviders() {
-    static $providers;
-
-    if ($providers === null) {
-      $objects = id(new PhutilSymbolLoader())
-        ->setAncestorClass(__CLASS__)
-        ->loadObjects();
-      $providers = $objects;
-    }
-
-    return $providers;
+    return id(new PhutilClassMapQuery())
+      ->setAncestorClass(__CLASS__)
+      ->execute();
   }
 
   public static function getAllProviders() {
@@ -489,7 +482,7 @@ abstract class PhabricatorAuthProvider extends Phobject {
           'problem persists, you may need to clear your cookies.'));
     }
 
-    if ($actual !== $expect) {
+    if (!phutil_hashes_are_identical($actual, $expect)) {
       throw new Exception(
         pht(
           'The authentication provider did not return the correct client '.

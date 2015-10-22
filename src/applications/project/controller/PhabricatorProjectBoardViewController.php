@@ -67,6 +67,13 @@ final class PhabricatorProjectBoardViewController
     // TODO: Expand the checks here if we add the ability
     // to hide the Backlog column
     if (!$columns) {
+      $can_edit = PhabricatorPolicyFilter::hasCapability(
+        $viewer,
+        $project,
+        PhabricatorPolicyCapability::CAN_EDIT);
+      if (!$can_edit) {
+        return $this->noAccessDialog($project);
+      }
       switch ($request->getStr('initialize-type')) {
         case 'backlog-only':
           $unguarded = AphrontWriteGuard::beginScopedUnguardedWrites();
@@ -362,7 +369,7 @@ final class PhabricatorProjectBoardViewController
       $project->getName());
 
     $header = id(new PHUIHeaderView())
-      ->setHeader(pht('%s Workboard', $header_link))
+      ->setHeader($header_link)
       ->setUser($viewer)
       ->setNoBackground(true)
       ->addActionLink($sort_menu)
@@ -370,12 +377,16 @@ final class PhabricatorProjectBoardViewController
       ->addActionLink($manage_menu)
       ->setPolicyObject($project);
 
+    $header_box = id(new PHUIBoxView())
+      ->appendChild($header)
+      ->addClass('project-board-header');
+
     $board_box = id(new PHUIBoxView())
       ->appendChild($board)
       ->addClass('project-board-wrapper');
 
     $nav = $this->buildIconNavView($project);
-    $nav->appendChild($header);
+    $nav->appendChild($header_box);
     $nav->appendChild($board_box);
 
     return $this->buildApplicationPage(
@@ -620,8 +631,7 @@ final class PhabricatorProjectBoardViewController
       ->setMetadata(
         array(
           'columnPHID' => $column->getPHID(),
-        ))
-      ->setDisabled(!$can_edit);
+        ));
 
     $batch_edit_uri = $request->getRequestURI();
     $batch_edit_uri->setQueryParam('batch', $column->getID());
@@ -636,15 +646,13 @@ final class PhabricatorProjectBoardViewController
       ->setHref($batch_edit_uri)
       ->setDisabled(!$can_batch_edit);
 
-    $edit_uri = $this->getApplicationURI(
+    $detail_uri = $this->getApplicationURI(
       'board/'.$this->id.'/column/'.$column->getID().'/');
 
     $column_items[] = id(new PhabricatorActionView())
-      ->setIcon('fa-pencil')
-      ->setName(pht('Edit Column'))
-      ->setHref($edit_uri)
-      ->setDisabled(!$can_edit)
-      ->setWorkflow(!$can_edit);
+      ->setIcon('fa-columns')
+      ->setName(pht('Column Details'))
+      ->setHref($detail_uri);
 
     $can_hide = ($can_edit && !$column->isDefaultColumn());
     $hide_uri = 'board/'.$this->id.'/hide/'.$column->getID().'/';
@@ -707,6 +715,20 @@ final class PhabricatorProjectBoardViewController
       ->addCancelButton($this->getApplicationURI('view/'.$project->getID().'/'))
       ->appendParagraph($instructions)
       ->appendChild($new_selector);
+
+    return id(new AphrontDialogResponse())
+      ->setDialog($dialog);
+  }
+
+  private function noAccessDialog(PhabricatorProject $project) {
+
+    $instructions = pht('This workboard has not been setup yet.');
+
+    $dialog = id(new AphrontDialogView())
+      ->setUser($this->getRequest()->getUser())
+      ->setTitle(pht('No Workboard'))
+      ->addCancelButton($this->getApplicationURI('view/'.$project->getID().'/'))
+      ->appendParagraph($instructions);
 
     return id(new AphrontDialogResponse())
       ->setDialog($dialog);

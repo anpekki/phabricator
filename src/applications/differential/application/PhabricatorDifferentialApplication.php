@@ -75,6 +75,8 @@ final class PhabricatorDifferentialApplication extends PhabricatorApplication {
             => 'DifferentialRevisionCloseDetailsController',
           'update/(?P<revisionID>[1-9]\d*)/'
             => 'DifferentialDiffCreateController',
+          'operation/(?P<id>[1-9]\d*)/'
+            => 'DifferentialRevisionOperationController',
         ),
         'comment/' => array(
           'preview/(?P<id>[1-9]\d*)/' => 'DifferentialCommentPreviewController',
@@ -187,6 +189,7 @@ final class PhabricatorDifferentialApplication extends PhabricatorApplication {
       DifferentialDefaultViewCapability::CAPABILITY => array(
         'caption' => pht('Default view policy for newly created revisions.'),
         'template' => DifferentialRevisionPHIDType::TYPECONST,
+        'capability' => PhabricatorPolicyCapability::CAN_VIEW,
       ),
     );
   }

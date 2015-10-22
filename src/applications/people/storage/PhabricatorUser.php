@@ -14,6 +14,7 @@ final class PhabricatorUser
     PhabricatorCustomFieldInterface,
     PhabricatorDestructibleInterface,
     PhabricatorSSHPublicKeyInterface,
+    PhabricatorFlaggableInterface,
     PhabricatorApplicationTransactionInterface {
 
   const SESSION_TABLE = 'phabricator_session';
@@ -54,6 +55,7 @@ final class PhabricatorUser
   private $preferences = null;
   private $omnipotent = false;
   private $customFields = self::ATTACHABLE;
+  private $badgePHIDs = self::ATTACHABLE;
 
   private $alternateCSRFString = self::ATTACHABLE;
   private $session = self::ATTACHABLE;
@@ -363,18 +365,15 @@ final class PhabricatorUser
   }
 
   public function validateCSRFToken($token) {
-    $salt = null;
-    $version = 'plain';
-
-    // This is a BREACH-mitigating token. See T3684.
+    // We expect a BREACH-mitigating token. See T3684.
     $breach_prefix = self::CSRF_BREACH_PREFIX;
     $breach_prelen = strlen($breach_prefix);
-
-    if (!strncmp($token, $breach_prefix, $breach_prelen)) {
-      $version = 'breach';
-      $salt = substr($token, $breach_prelen, self::CSRF_SALT_LENGTH);
-      $token = substr($token, $breach_prelen + self::CSRF_SALT_LENGTH);
+    if (strncmp($token, $breach_prefix, $breach_prelen) !== 0) {
+      return false;
     }
+
+    $salt = substr($token, $breach_prelen, self::CSRF_SALT_LENGTH);
+    $token = substr($token, $breach_prelen + self::CSRF_SALT_LENGTH);
 
     // When the user posts a form, we check that it contains a valid CSRF token.
     // Tokens cycle each hour (every CSRF_CYLCE_FREQUENCY seconds) and we accept
@@ -405,22 +404,11 @@ final class PhabricatorUser
 
     for ($ii = -$csrf_window; $ii <= 1; $ii++) {
       $valid = $this->getRawCSRFToken($ii);
-      switch ($version) {
-        // TODO: We can remove this after the BREACH version has been in the
-        // wild for a while.
-        case 'plain':
-          if ($token == $valid) {
-            return true;
-          }
-          break;
-        case 'breach':
-          $digest = PhabricatorHash::digest($valid, $salt);
-          if (substr($digest, 0, self::CSRF_TOKEN_LENGTH) == $token) {
-            return true;
-          }
-          break;
-        default:
-          throw new Exception(pht('Unknown CSRF token format!'));
+
+      $digest = PhabricatorHash::digest($valid, $salt);
+      $digest = substr($digest, 0, self::CSRF_TOKEN_LENGTH);
+      if (phutil_hashes_are_identical($digest, $token)) {
+        return true;
       }
     }
 
@@ -599,6 +587,13 @@ final class PhabricatorUser
   }
 
   public function sendWelcomeEmail(PhabricatorUser $admin) {
+    if (!$this->canEstablishWebSessions()) {
+      throw new Exception(
+        pht(
+          'Can not send welcome mail to users who can not establish '.
+          'web sessions!'));
+    }
+
     $admin_username = $admin->getUserName();
     $admin_realname = $admin->getRealName();
     $user_username = $this->getUserName();
@@ -736,6 +731,41 @@ final class PhabricatorUser
 
   public function getTimeZone() {
     return new DateTimeZone($this->getTimezoneIdentifier());
+  }
+
+  public function getPreference($key) {
+    $preferences = $this->loadPreferences();
+
+    // TODO: After T4103 and T7707 this should eventually be pushed down the
+    // stack into modular preference definitions and role profiles. This is
+    // just fixing T8601 and mildly anticipating those changes.
+    $value = $preferences->getPreference($key);
+
+    $allowed_values = null;
+    switch ($key) {
+      case PhabricatorUserPreferences::PREFERENCE_TIME_FORMAT:
+        $allowed_values = array(
+          'g:i A',
+          'H:i',
+        );
+        break;
+      case PhabricatorUserPreferences::PREFERENCE_DATE_FORMAT:
+        $allowed_values = array(
+          'Y-m-d',
+          'n/j/Y',
+          'd-m-Y',
+        );
+        break;
+    }
+
+    if ($allowed_values !== null) {
+      $allowed_values = array_fuse($allowed_values);
+      if (empty($allowed_values[$value])) {
+        $value = head($allowed_values);
+      }
+    }
+
+    return $value;
   }
 
   public function __toString() {
@@ -1038,6 +1068,29 @@ final class PhabricatorUser
   }
 
 
+  /**
+   * Get a scalar string identifying this user.
+   *
+   * This is similar to using the PHID, but distinguishes between ominpotent
+   * and public users explicitly. This allows safe construction of cache keys
+   * or cache buckets which do not conflate public and omnipotent users.
+   *
+   * @return string Scalar identifier.
+   */
+  public function getCacheFragment() {
+    if ($this->isOmnipotent()) {
+      return 'u.omnipotent';
+    }
+
+    $phid = $this->getPHID();
+    if ($phid) {
+      return 'u.'.$phid;
+    }
+
+    return 'u.public';
+  }
+
+
 /* -(  Managing Handles  )--------------------------------------------------- */
 
 
@@ -1084,6 +1137,15 @@ final class PhabricatorUser
    */
   public function renderHandleList(array $phids) {
     return $this->loadHandles($phids)->renderList();
+  }
+
+  public function attachBadgePHIDs(array $phids) {
+    $this->badgePHIDs = $phids;
+    return $this;
+  }
+
+  public function getBadgePHIDs() {
+    return $this->assertAttached($this->badgePHIDs);
   }
 
 

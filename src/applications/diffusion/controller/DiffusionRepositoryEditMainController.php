@@ -31,6 +31,7 @@ final class DiffusionRepositoryEditMainController
     $has_branches = ($is_git || $is_hg);
     $has_local = $repository->usesLocalWorkingCopy();
     $supports_staging = $repository->supportsStaging();
+    $supports_automation = $repository->supportsAutomation();
 
     $crumbs = $this->buildApplicationCrumbs($is_main = true);
 
@@ -98,6 +99,13 @@ final class DiffusionRepositoryEditMainController
       $staging_properties = $this->buildStagingProperties(
         $repository,
         $this->buildStagingActions($repository));
+    }
+
+    $automation_properties = null;
+    if ($supports_automation) {
+      $automation_properties = $this->buildAutomationProperties(
+        $repository,
+        $this->buildAutomationActions($repository));
     }
 
     $actions_properties = $this->buildActionsProperties(
@@ -169,6 +177,12 @@ final class DiffusionRepositoryEditMainController
       $boxes[] = id(new PHUIObjectBoxView())
         ->setHeaderText(pht('Staging'))
         ->addPropertyList($staging_properties);
+    }
+
+    if ($automation_properties) {
+      $boxes[] = id(new PHUIObjectBoxView())
+        ->setHeaderText(pht('Automation'))
+        ->addPropertyList($automation_properties);
     }
 
     $boxes[] = id(new PHUIObjectBoxView())
@@ -264,6 +278,7 @@ final class DiffusionRepositoryEditMainController
 
     $view = id(new PHUIPropertyListView())
       ->setUser($viewer)
+      ->setObject($repository)
       ->setActionList($actions);
 
     $type = PhabricatorRepositoryType::getNameForRepositoryType(
@@ -271,7 +286,6 @@ final class DiffusionRepositoryEditMainController
 
     $view->addProperty(pht('Type'), $type);
     $view->addProperty(pht('Callsign'), $repository->getCallsign());
-
 
     $clone_name = $repository->getDetail('clone-name');
 
@@ -283,17 +297,7 @@ final class DiffusionRepositoryEditMainController
           : phutil_tag('em', array(), $repository->getCloneName().'/'));
     }
 
-    $project_phids = PhabricatorEdgeQuery::loadDestinationPHIDs(
-      $repository->getPHID(),
-      PhabricatorProjectObjectHasProjectEdgeType::EDGECONST);
-    if ($project_phids) {
-      $project_text = $viewer->renderHandleList($project_phids);
-    } else {
-      $project_text = phutil_tag('em', array(), pht('None'));
-    }
-    $view->addProperty(
-      pht('Projects'),
-      $project_text);
+    $view->invokeWillRenderEvent();
 
     $view->addProperty(
       pht('Status'),
@@ -304,7 +308,8 @@ final class DiffusionRepositoryEditMainController
       $this->buildRepositoryUpdateInterval($repository));
 
     $description = $repository->getDetail('description');
-    $view->addSectionHeader(pht('Description'));
+    $view->addSectionHeader(
+      pht('Description'), PHUIPropertyListView::ICON_SUMMARY);
     if (!strlen($description)) {
       $description = phutil_tag('em', array(), pht('No description provided.'));
     } else {
@@ -386,9 +391,17 @@ final class DiffusionRepositoryEditMainController
       $viewer,
       $repository);
 
+    $view_parts = array();
+    if (PhabricatorSpacesNamespaceQuery::getViewerSpacesExist($viewer)) {
+      $space_phid = PhabricatorSpacesNamespaceQuery::getObjectSpacePHID(
+        $repository);
+      $view_parts[] = $viewer->renderHandle($space_phid);
+    }
+    $view_parts[] = $descriptions[PhabricatorPolicyCapability::CAN_VIEW];
+
     $view->addProperty(
       pht('Visible To'),
-      $descriptions[PhabricatorPolicyCapability::CAN_VIEW]);
+      phutil_implode_html(" \xC2\xB7 ", $view_parts));
 
     $view->addProperty(
       pht('Editable By'),
@@ -623,7 +636,6 @@ final class DiffusionRepositoryEditMainController
     return $view;
   }
 
-
   private function buildStagingActions(PhabricatorRepository $repository) {
     $viewer = $this->getViewer();
 
@@ -658,6 +670,47 @@ final class DiffusionRepositoryEditMainController
     $view->addProperty(
       pht('Staging Area'),
       $staging_uri);
+
+    return $view;
+  }
+
+  private function buildAutomationActions(PhabricatorRepository $repository) {
+    $viewer = $this->getViewer();
+
+    $view = id(new PhabricatorActionListView())
+      ->setObjectURI($this->getRequest()->getRequestURI())
+      ->setUser($viewer);
+
+    $edit = id(new PhabricatorActionView())
+      ->setIcon('fa-pencil')
+      ->setName(pht('Edit Automation'))
+      ->setHref(
+        $this->getRepositoryControllerURI($repository, 'edit/automation/'));
+    $view->addAction($edit);
+
+    return $view;
+  }
+
+  private function buildAutomationProperties(
+    PhabricatorRepository $repository,
+    PhabricatorActionListView $actions) {
+    $viewer = $this->getViewer();
+
+    $view = id(new PHUIPropertyListView())
+      ->setUser($viewer)
+      ->setActionList($actions);
+
+    $blueprint_phids = $repository->getAutomationBlueprintPHIDs();
+    if (!$blueprint_phids) {
+      $blueprint_view = phutil_tag('em', array(), pht('Not Configured'));
+    } else {
+      $blueprint_view = id(new DrydockObjectAuthorizationView())
+        ->setUser($viewer)
+        ->setObjectPHID($repository->getPHID())
+        ->setBlueprintPHIDs($blueprint_phids);
+    }
+
+    $view->addProperty(pht('Automation'), $blueprint_view);
 
     return $view;
   }

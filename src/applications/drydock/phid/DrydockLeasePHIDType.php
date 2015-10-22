@@ -8,6 +8,14 @@ final class DrydockLeasePHIDType extends PhabricatorPHIDType {
     return pht('Drydock Lease');
   }
 
+  public function getPHIDTypeApplicationClass() {
+    return 'PhabricatorDrydockApplication';
+  }
+
+  public function getTypeIcon() {
+    return 'fa-link';
+  }
+
   public function newObject() {
     return new DrydockLease();
   }
@@ -29,6 +37,9 @@ final class DrydockLeasePHIDType extends PhabricatorPHIDType {
       $lease = $objects[$phid];
       $id = $lease->getID();
 
+      $handle->setName(pht(
+        'Lease %d',
+        $id));
       $handle->setURI("/drydock/lease/{$id}/");
     }
   }

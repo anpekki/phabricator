@@ -3,9 +3,8 @@
 final class PhabricatorConduitLogController
   extends PhabricatorConduitController {
 
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
 
     $conn_table = new PhabricatorConduitConnectionLog();
     $call_table = new PhabricatorConduitMethodCallLog();
@@ -37,7 +36,7 @@ final class PhabricatorConduitLogController
     $table = $this->renderCallTable($calls, $conns);
     $box = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Call Logs'))
-      ->appendChild($table);
+      ->setTable($table);
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb(pht('Call Logs'));

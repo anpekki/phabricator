@@ -243,6 +243,10 @@ abstract class PhabricatorApplication
     return array();
   }
 
+  public function getResourceRoutes() {
+    return array();
+  }
+
 
 /* -(  Email Integration  )-------------------------------------------------- */
 
@@ -383,13 +387,13 @@ abstract class PhabricatorApplication
     static $applications;
 
     if ($applications === null) {
-      $apps = id(new PhutilSymbolLoader())
+      $apps = id(new PhutilClassMapQuery())
         ->setAncestorClass(__CLASS__)
-        ->loadObjects();
+        ->setSortMethod('getApplicationOrder')
+        ->execute();
 
       // Reorder the applications into "application order". Notably, this
       // ensures their event handlers register in application order.
-      $apps = msort($apps, 'getApplicationOrder');
       $apps = mgroup($apps, 'getApplicationGroup');
 
       $group_order = array_keys(self::getApplicationGroups());
@@ -448,6 +452,10 @@ abstract class PhabricatorApplication
   final public static function isClassInstalledForViewer(
     $class,
     PhabricatorUser $viewer) {
+
+    if ($viewer->isOmnipotent()) {
+      return true;
+    }
 
     $cache = PhabricatorCaches::getRequestCache();
     $viewer_phid = $viewer->getPHID();
@@ -604,6 +612,23 @@ abstract class PhabricatorApplication
 
     $spec = $this->getCustomCapabilitySpecification($capability);
     return idx($spec, 'template');
+  }
+
+  final public function getDefaultObjectTypePolicyMap() {
+    $map = array();
+
+    foreach ($this->getCustomCapabilities() as $capability => $spec) {
+      if (empty($spec['template'])) {
+        continue;
+      }
+      if (empty($spec['capability'])) {
+        continue;
+      }
+      $default = $this->getPolicy($capability);
+      $map[$spec['template']][$spec['capability']] = $default;
+    }
+
+    return $map;
   }
 
   public function getApplicationSearchDocumentTypes() {

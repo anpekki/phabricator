@@ -54,14 +54,27 @@ final class DiffusionBrowseFileController extends DiffusionBrowseController {
     $needs_blame = ($show_blame && !$show_color) ||
                    ($show_blame && $request->isAjax());
 
+    $params = array(
+      'commit' => $drequest->getCommit(),
+      'path' => $drequest->getPath(),
+      'needsBlame' => $needs_blame,
+    );
+
+    $byte_limit = null;
+    if ($view !== 'raw') {
+      $byte_limit = PhabricatorFileStorageEngine::getChunkThreshold();
+      $time_limit = 10;
+
+      $params += array(
+        'timeout' => $time_limit,
+        'byteLimit' => $byte_limit,
+      );
+    }
+
     $file_content = DiffusionFileContent::newFromConduit(
       $this->callConduitWithDiffusionRequest(
         'diffusion.filecontentquery',
-        array(
-          'commit' => $drequest->getCommit(),
-          'path' => $drequest->getPath(),
-          'needsBlame' => $needs_blame,
-        )));
+        $params));
     $data = $file_content->getCorpus();
 
     if ($view === 'raw') {
@@ -71,8 +84,13 @@ final class DiffusionBrowseFileController extends DiffusionBrowseController {
     $this->loadLintMessages();
     $this->coverage = $drequest->loadCoverage();
 
-    $binary_uri = null;
-    if (ArcanistDiffUtils::isHeuristicBinaryFile($data)) {
+    if ($byte_limit && (strlen($data) == $byte_limit)) {
+      $corpus = $this->buildErrorCorpus(
+        pht(
+          'This file is larger than %s byte(s), and too large to display '.
+          'in the web UI.',
+          $byte_limit));
+    } else if (ArcanistDiffUtils::isHeuristicBinaryFile($data)) {
       $file = $this->loadFileForData($path, $data);
       $file_uri = $file->getBestURI();
 
@@ -80,7 +98,6 @@ final class DiffusionBrowseFileController extends DiffusionBrowseController {
         $corpus = $this->buildImageCorpus($file_uri);
       } else {
         $corpus = $this->buildBinaryCorpus($file_uri, $data);
-        $binary_uri = $file_uri;
       }
     } else {
       // Build the content of the file.
@@ -271,7 +288,7 @@ final class DiffusionBrowseFileController extends DiffusionBrowseController {
 
       $repo = $drequest->getRepository();
       $symbol_repos = nonempty($repo->getSymbolSources(), array());
-      $symbol_repos[] = $repo;
+      $symbol_repos[] = $repo->getPHID();
 
       $lang = last(explode('.', $drequest->getPath()));
       $repo_languages = $repo->getSymbolLanguages();
@@ -320,7 +337,8 @@ final class DiffusionBrowseFileController extends DiffusionBrowseController {
 
     $corpus = id(new PHUIObjectBoxView())
       ->setHeader($header)
-      ->appendChild($corpus);
+      ->appendChild($corpus)
+      ->setCollapsed(true);
 
     return $corpus;
   }
@@ -932,6 +950,21 @@ final class DiffusionBrowseFileController extends DiffusionBrowseController {
     $header = id(new PHUIHeaderView())
       ->setHeader(pht('Details'))
       ->addActionLink($file);
+
+    $box = id(new PHUIObjectBoxView())
+      ->setHeader($header)
+      ->appendChild($text);
+
+    return $box;
+  }
+
+  private function buildErrorCorpus($message) {
+    $text = id(new PHUIBoxView())
+      ->addPadding(PHUI::PADDING_LARGE)
+      ->appendChild($message);
+
+    $header = id(new PHUIHeaderView())
+      ->setHeader(pht('Details'));
 
     $box = id(new PHUIObjectBoxView())
       ->setHeader($header)
