@@ -19,8 +19,8 @@ BuildArch:      noarch
 Requires(pre):  shadow-utils
 Requires(post): chkconfig
 Requires(preun): chkconfig initscripts
-Requires:       httpd git php php-cli php-mysql php-process php-devel php-gd python-pygments
-Requires:       php-pecl-apc php-pecl-json php-mbstring mysql-server
+Requires:       git php php-cli php-mysql php-process php-devel php-gd python-pygments
+Requires:       php-pecl-apc php-pecl-json php-mbstring sudo
 Requires:       phabricator-arcanist = %{version}-%{release}
 Requires:       phabricator-libphutil = %{version}-%{release}
 AutoReq:        no
