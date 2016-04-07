@@ -7,7 +7,8 @@ final class PassphraseCredential extends PassphraseDAO
     PhabricatorFlaggableInterface,
     PhabricatorSubscribableInterface,
     PhabricatorDestructibleInterface,
-    PhabricatorSpacesInterface {
+    PhabricatorSpacesInterface,
+    PhabricatorFulltextInterface {
 
   protected $name;
   protected $credentialType;
@@ -24,6 +25,7 @@ final class PassphraseCredential extends PassphraseDAO
   protected $spacePHID;
 
   private $secret = self::ATTACHABLE;
+  private $implementation = self::ATTACHABLE;
 
   public static function initializeNewCredential(PhabricatorUser $actor) {
     $app = id(new PhabricatorApplicationQuery())
@@ -97,6 +99,15 @@ final class PassphraseCredential extends PassphraseDAO
     return PassphraseCredentialType::getTypeByConstant($type);
   }
 
+  public function attachImplementation(PassphraseCredentialType $impl) {
+    $this->implementation = $impl;
+    return $this;
+  }
+
+  public function getImplementation() {
+    return $this->assertAttached($this->implementation);
+  }
+
 
 /* -(  PhabricatorApplicationTransactionInterface  )------------------------- */
 
@@ -156,14 +167,6 @@ final class PassphraseCredential extends PassphraseDAO
     return false;
   }
 
-  public function shouldShowSubscribersProperty() {
-    return true;
-  }
-
-  public function shouldAllowSubscription($phid) {
-    return true;
-  }
-
 
 /* -(  PhabricatorDestructibleInterface  )----------------------------------- */
 
@@ -188,5 +191,14 @@ final class PassphraseCredential extends PassphraseDAO
   public function getSpacePHID() {
     return $this->spacePHID;
   }
+
+
+/* -(  PhabricatorFulltextInterface  )--------------------------------------- */
+
+
+  public function newFulltextEngine() {
+    return new PassphraseCredentialFulltextEngine();
+  }
+
 
 }

@@ -23,13 +23,14 @@ final class PhabricatorDaemonBulkJobViewController
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb(pht('Bulk Jobs'), '/daemon/bulk/');
     $crumbs->addTextCrumb($title);
+    $crumbs->setBorder(true);
 
     $properties = $this->renderProperties($job);
-    $actions = $this->renderActions($job);
-    $properties->setActionList($actions);
+    $curtain = $this->buildCurtainView($job);
 
     $box = id(new PHUIObjectBoxView())
-      ->setHeaderText($title)
+      ->setHeaderText(pht('Details'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->addPropertyList($properties);
 
     $timeline = $this->buildTransactionTimeline(
@@ -37,15 +38,22 @@ final class PhabricatorDaemonBulkJobViewController
       new PhabricatorWorkerBulkJobTransactionQuery());
     $timeline->setShouldTerminate(true);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title)
+      ->setHeaderIcon('fa-hourglass');
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setCurtain($curtain)
+      ->setMainColumn(array(
         $box,
         $timeline,
-      ),
-      array(
-        'title' => $title,
       ));
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
   private function renderProperties(PhabricatorWorkerBulkJob $job) {
@@ -64,20 +72,23 @@ final class PhabricatorDaemonBulkJobViewController
     return $view;
   }
 
-  private function renderActions(PhabricatorWorkerBulkJob $job) {
+  private function buildCurtainView(PhabricatorWorkerBulkJob $job) {
     $viewer = $this->getViewer();
+    $curtain = $this->newCurtainView($job);
 
-    $actions = id(new PhabricatorActionListView())
-      ->setUser($viewer)
-      ->setObject($job);
+    if ($job->isConfirming()) {
+      $continue_uri = $job->getMonitorURI();
+    } else {
+      $continue_uri = $job->getDoneURI();
+    }
 
-    $actions->addAction(
+    $curtain->addAction(
       id(new PhabricatorActionView())
-        ->setHref($job->getDoneURI())
+        ->setHref($continue_uri)
         ->setIcon('fa-arrow-circle-o-right')
         ->setName(pht('Continue')));
 
-    return $actions;
+    return $curtain;
   }
 
 }

@@ -3,24 +3,15 @@
 final class DiffusionRepositoryEditStorageController
   extends DiffusionRepositoryEditController {
 
-  protected function processDiffusionRequest(AphrontRequest $request) {
-    $user = $request->getUser();
-    $drequest = $this->diffusionRequest;
-    $repository = $drequest->getRepository();
-
-    $repository = id(new PhabricatorRepositoryQuery())
-      ->setViewer($user)
-      ->requireCapabilities(
-        array(
-          PhabricatorPolicyCapability::CAN_VIEW,
-          PhabricatorPolicyCapability::CAN_EDIT,
-        ))
-      ->withIDs(array($repository->getID()))
-      ->executeOne();
-
-    if (!$repository) {
-      return new Aphront404Response();
+  public function handleRequest(AphrontRequest $request) {
+    $response = $this->loadDiffusionContextForEdit();
+    if ($response) {
+      return $response;
     }
+
+    $viewer = $this->getViewer();
+    $drequest = $this->getDiffusionRequest();
+    $repository = $drequest->getRepository();
 
     $edit_uri = $this->getRepositoryControllerURI($repository, 'edit/');
 
@@ -31,6 +22,9 @@ final class DiffusionRepositoryEditStorageController
     $crumbs->addTextCrumb(pht('Edit Storage'));
 
     $title = pht('Edit %s', $repository->getName());
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title)
+      ->setHeaderIcon('fa-pencil');
 
     $service_phid = $repository->getAlmanacServicePHID();
     if ($service_phid) {
@@ -44,7 +38,7 @@ final class DiffusionRepositoryEditStorageController
     }
 
     $form = id(new AphrontFormView())
-      ->setUser($user)
+      ->setUser($viewer)
       ->appendChild(
         id(new AphrontFormMarkupControl())
           ->setLabel(pht('Storage Service'))
@@ -60,25 +54,27 @@ final class DiffusionRepositoryEditStorageController
           "web interface. To edit it, run this command:\n\n  %s",
           sprintf(
             'phabricator/ $ ./bin/repository edit %s --as %s --local-path ...',
-            $repository->getCallsign(),
-            $user->getUsername())))
+            $repository->getMonogram(),
+            $viewer->getUsername())))
       ->appendChild(
         id(new AphrontFormSubmitControl())
           ->addCancelButton($edit_uri, pht('Done')));
 
-    $object_box = id(new PHUIObjectBoxView())
-      ->setHeaderText($title)
-      ->setForm($form)
-      ->setFormErrors($errors);
+    $form_box = id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Storage'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+      ->setForm($form);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $object_box,
-      ),
-      array(
-        'title' => $title,
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter(array(
+        $form_box,
       ));
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
 }

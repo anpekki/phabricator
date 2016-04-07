@@ -6,6 +6,7 @@ final class DiffusionHistoryTableView extends DiffusionView {
   private $revisions = array();
   private $handles = array();
   private $isHead;
+  private $isTail;
   private $parents;
 
   public function setHistory(array $history) {
@@ -60,6 +61,11 @@ final class DiffusionHistoryTableView extends DiffusionView {
     return $this;
   }
 
+  public function setIsTail($is_tail) {
+    $this->isTail = $is_tail;
+    return $this;
+  }
+
   public function render() {
     $drequest = $this->getDiffusionRequest();
 
@@ -89,7 +95,7 @@ final class DiffusionHistoryTableView extends DiffusionView {
       $epoch = $history->getEpoch();
 
       if ($epoch) {
-        $committed = phabricator_datetime($epoch, $viewer);
+        $committed = $viewer->formatShortDateTime($epoch);
       } else {
         $committed = null;
       }
@@ -189,7 +195,7 @@ final class DiffusionHistoryTableView extends DiffusionView {
         '',
         '',
         'wide',
-        '',
+        'right',
       ));
     $view->setColumnVisibility(
       array(
@@ -342,6 +348,16 @@ final class DiffusionHistoryTableView extends DiffusionView {
         'split' => $splits,
         'join' => $joins,
       );
+    }
+
+    // If this is the last page in history, replace the "o" with an "x" so we
+    // do not draw a connecting line downward, and replace "^" with an "X" for
+    // repositories with exactly one commit.
+    if ($this->isTail && $graph) {
+      $last = array_pop($graph);
+      $last['line'] = str_replace('o', 'x', $last['line']);
+      $last['line'] = str_replace('^', 'X', $last['line']);
+      $graph[] = $last;
     }
 
     // Render into tags for the behavior.

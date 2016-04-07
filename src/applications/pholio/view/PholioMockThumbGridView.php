@@ -107,6 +107,7 @@ final class PholioMockThumbGridView extends AphrontView {
 
     return id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Mock History'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->appendChild($grid);
   }
 
@@ -156,7 +157,7 @@ final class PholioMockThumbGridView extends AphrontView {
         array(
           'class' => 'pholio-mock-thumb-grid-comment-count',
         ),
-        pht('%s', new PhutilNumber(count($image->getInlineComments()))));
+        pht('%s', phutil_count($image->getInlineComments())));
     }
 
     return javelin_tag(

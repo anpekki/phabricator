@@ -48,7 +48,9 @@ final class PHUIBadgeMiniView extends AphrontTagView {
     $classes = array();
     $classes[] = 'phui-badge-mini';
     if ($this->quality) {
-      $classes[] = 'phui-badge-mini-'.$this->quality;
+      $quality_color = PhabricatorBadgesQuality::getQualityColor(
+        $this->quality);
+      $classes[] = 'phui-badge-mini-'.$quality_color;
     }
 
     return array(
@@ -65,7 +67,7 @@ final class PHUIBadgeMiniView extends AphrontTagView {
 
   protected function getTagContent() {
     return id(new PHUIIconView())
-      ->setIconFont($this->icon);
+      ->setIcon($this->icon);
   }
 
 }

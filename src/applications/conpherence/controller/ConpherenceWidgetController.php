@@ -57,7 +57,7 @@ final class ConpherenceWidgetController extends ConpherenceController {
 
     $widgets = array();
     $new_icon = id(new PHUIIconView())
-      ->setIconFont('fa-plus')
+      ->setIcon('fa-plus')
       ->setHref($this->getWidgetURI())
       ->setMetadata(array('widget' => null))
       ->addSigil('conpherence-widget-adder');
@@ -76,7 +76,7 @@ final class ConpherenceWidgetController extends ConpherenceController {
       ),
       id(new PHUIHeaderView())
       ->setHeader($header)
-      ->addActionIcon($new_icon));
+      ->addActionItem($new_icon));
     $user = $this->getRequest()->getUser();
     // now the widget bodies
     $widgets[] = javelin_tag(

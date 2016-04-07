@@ -3,12 +3,20 @@
 final class DrydockWorkingCopyBlueprintImplementation
   extends DrydockBlueprintImplementation {
 
+  const PHASE_SQUASHMERGE = 'squashmerge';
+  const PHASE_REMOTEFETCH = 'blueprint.workingcopy.fetch.remote';
+  const PHASE_MERGEFETCH = 'blueprint.workingcopy.fetch.staging';
+
   public function isEnabled() {
     return true;
   }
 
   public function getBlueprintName() {
     return pht('Working Copy');
+  }
+
+  public function getBlueprintIcon() {
+    return 'fa-folder-open';
   }
 
   public function getDescription() {
@@ -125,15 +133,7 @@ final class DrydockWorkingCopyBlueprintImplementation
       ->setOwnerPHID($resource_phid)
       ->setAttribute('workingcopy.resourcePHID', $resource_phid)
       ->setAllowedBlueprintPHIDs($blueprint_phids);
-
-    $resource
-      ->setAttribute('host.leasePHID', $host_lease->getPHID())
-      ->save();
-
-    $host_lease->queueForActivation();
-
-    // TODO: Add some limits to the number of working copies we can have at
-    // once?
+    $resource->setAttribute('host.leasePHID', $host_lease->getPHID());
 
     $map = $lease->getAttribute('repositories.map');
     foreach ($map as $key => $value) {
@@ -143,10 +143,18 @@ final class DrydockWorkingCopyBlueprintImplementation
           'phid',
         ));
     }
+    $resource->setAttribute('repositories.map', $map);
 
-    return $resource
-      ->setAttribute('repositories.map', $map)
-      ->allocateResource();
+    $slot_lock = $this->getConcurrentResourceLimitSlotLock($blueprint);
+    if ($slot_lock !== null) {
+      $resource->needSlotLock($slot_lock);
+    }
+
+    $resource->allocateResource();
+
+    $host_lease->queueForActivation();
+
+    return $resource;
   }
 
   public function activateResource(
@@ -234,11 +242,10 @@ final class DrydockWorkingCopyBlueprintImplementation
 
     $default = null;
     foreach ($map as $directory => $spec) {
+      $interface->pushWorkingDirectory("{$root}/repo/{$directory}/");
+
       $cmd = array();
       $arg = array();
-
-      $cmd[] = 'cd %s';
-      $arg[] = "{$root}/repo/{$directory}/";
 
       $cmd[] = 'git clean -d --force';
       $cmd[] = 'git fetch';
@@ -248,16 +255,33 @@ final class DrydockWorkingCopyBlueprintImplementation
 
       $ref = idx($spec, 'ref');
 
+      // Reset things first, in case previous builds left anything staged or
+      // dirty.
+      $cmd[] = 'git reset --hard HEAD';
+
       if ($commit !== null) {
-        $cmd[] = 'git reset --hard %s';
+        $cmd[] = 'git checkout %s --';
         $arg[] = $commit;
       } else if ($branch !== null) {
-        $cmd[] = 'git checkout %s';
+        $cmd[] = 'git checkout %s --';
         $arg[] = $branch;
 
         $cmd[] = 'git reset --hard origin/%s';
         $arg[] = $branch;
-      } else if ($ref) {
+      }
+
+      $this->execxv($interface, $cmd, $arg);
+
+      if (idx($spec, 'default')) {
+        $default = $directory;
+      }
+
+      // If we're fetching a ref from a remote, do that separately so we can
+      // raise a more tailored error.
+      if ($ref) {
+        $cmd = array();
+        $arg = array();
+
         $ref_uri = $ref['uri'];
         $ref_ref = $ref['ref'];
 
@@ -266,25 +290,37 @@ final class DrydockWorkingCopyBlueprintImplementation
         $arg[] = $ref_ref;
         $arg[] = $ref_ref;
 
-        $cmd[] = 'git checkout %s';
+        $cmd[] = 'git checkout %s --';
         $arg[] = $ref_ref;
 
-        $cmd[] = 'git reset --hard %s';
-        $arg[] = $ref_ref;
-      } else {
-        $cmd[] = 'git reset --hard HEAD';
+        try {
+          $this->execxv($interface, $cmd, $arg);
+        } catch (CommandException $ex) {
+          $display_command = csprintf(
+            'git fetch %R %R',
+            $ref_uri,
+            $ref_ref);
+
+          $error = DrydockCommandError::newFromCommandException($ex)
+            ->setPhase(self::PHASE_REMOTEFETCH)
+            ->setDisplayCommand($display_command);
+
+          $lease->setAttribute(
+            'workingcopy.vcs.error',
+            $error->toDictionary());
+
+          throw $ex;
+        }
       }
 
-      $cmd = implode(' && ', $cmd);
-      $argv = array_merge(array($cmd), $arg);
-
-      $result = call_user_func_array(
-        array($interface, 'execx'),
-        $argv);
-
-      if (idx($spec, 'default')) {
-        $default = $directory;
+      $merges = idx($spec, 'merges');
+      if ($merges) {
+        foreach ($merges as $merge) {
+          $this->applyMerge($lease, $interface, $merge);
+        }
       }
+
+      $interface->popWorkingDirectory();
     }
 
     if ($default === null) {
@@ -333,7 +369,7 @@ final class DrydockWorkingCopyBlueprintImplementation
         $command_interface = $host_lease->getInterface($type);
 
         $path = $lease->getAttribute('workingcopy.default');
-        $command_interface->setWorkingDirectory($path);
+        $command_interface->pushWorkingDirectory($path);
 
         return $command_interface;
     }
@@ -393,14 +429,90 @@ final class DrydockWorkingCopyBlueprintImplementation
     return $lease;
   }
 
-  public function getFieldSpecifications() {
+  protected function getCustomFieldSpecifications() {
     return array(
       'blueprintPHIDs' => array(
         'name' => pht('Use Blueprints'),
         'type' => 'blueprints',
         'required' => true,
       ),
-    ) + parent::getFieldSpecifications();
+    );
+  }
+
+  protected function shouldUseConcurrentResourceLimit() {
+    return true;
+  }
+
+  private function applyMerge(
+    DrydockLease $lease,
+    DrydockCommandInterface $interface,
+    array $merge) {
+
+    $src_uri = $merge['src.uri'];
+    $src_ref = $merge['src.ref'];
+
+
+    try {
+      $interface->execx(
+        'git fetch --no-tags -- %s +%s:%s',
+        $src_uri,
+        $src_ref,
+        $src_ref);
+    } catch (CommandException $ex) {
+      $display_command = csprintf(
+        'git fetch %R +%R:%R',
+        $src_uri,
+        $src_ref,
+        $src_ref);
+
+      $error = DrydockCommandError::newFromCommandException($ex)
+        ->setPhase(self::PHASE_MERGEFETCH)
+        ->setDisplayCommand($display_command);
+
+      $lease->setAttribute('workingcopy.vcs.error', $error->toDictionary());
+
+      throw $ex;
+    }
+
+
+    // NOTE: This can never actually generate a commit because we pass
+    // "--squash", but git sometimes runs code to check that a username and
+    // email are configured anyway.
+    $real_command = csprintf(
+      'git -c user.name=%s -c user.email=%s merge --no-stat --squash -- %R',
+      'drydock',
+      'drydock@phabricator',
+      $src_ref);
+
+    try {
+      $interface->execx('%C', $real_command);
+    } catch (CommandException $ex) {
+      $display_command = csprintf(
+        'git merge --squash %R',
+        $src_ref);
+
+      $error = DrydockCommandError::newFromCommandException($ex)
+        ->setPhase(self::PHASE_SQUASHMERGE)
+        ->setDisplayCommand($display_command);
+
+      $lease->setAttribute('workingcopy.vcs.error', $error->toDictionary());
+      throw $ex;
+    }
+  }
+
+  public function getCommandError(DrydockLease $lease) {
+    return $lease->getAttribute('workingcopy.vcs.error');
+  }
+
+  private function execxv(
+    DrydockCommandInterface $interface,
+    array $commands,
+    array $arguments) {
+
+    $commands = implode(' && ', $commands);
+    $argv = array_merge(array($commands), $arguments);
+
+    return call_user_func_array(array($interface, 'execx'), $argv);
   }
 
 

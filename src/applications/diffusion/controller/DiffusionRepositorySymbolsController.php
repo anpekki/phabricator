@@ -3,24 +3,15 @@
 final class DiffusionRepositorySymbolsController
   extends DiffusionRepositoryEditController {
 
-  protected function processDiffusionRequest(AphrontRequest $request) {
-    $user = $request->getUser();
-    $drequest = $this->diffusionRequest;
-    $repository = $drequest->getRepository();
-
-    $repository = id(new PhabricatorRepositoryQuery())
-      ->setViewer($user)
-      ->requireCapabilities(
-        array(
-          PhabricatorPolicyCapability::CAN_VIEW,
-          PhabricatorPolicyCapability::CAN_EDIT,
-        ))
-      ->withIDs(array($repository->getID()))
-      ->executeOne();
-
-    if (!$repository) {
-      return new Aphront404Response();
+  public function handleRequest(AphrontRequest $request) {
+    $response = $this->loadDiffusionContextForEdit();
+    if ($response) {
+      return $response;
     }
+
+    $viewer = $this->getViewer();
+    $drequest = $this->getDiffusionRequest();
+    $repository = $drequest->getRepository();
 
     $edit_uri = $this->getRepositoryControllerURI($repository, 'edit/');
 
@@ -55,7 +46,7 @@ final class DiffusionRepositorySymbolsController
           id(new PhabricatorRepositoryEditor())
             ->setContinueOnNoEffect(true)
             ->setContentSourceFromRequest($request)
-            ->setActor($user)
+            ->setActor($viewer)
             ->applyTransactions($repository, $xactions);
 
           return id(new AphrontRedirectResponse())->setURI($edit_uri);
@@ -68,10 +59,13 @@ final class DiffusionRepositorySymbolsController
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb(pht('Edit Symbols'));
 
-    $title = pht('Edit %s', $repository->getName());
+    $title = pht('Edit Symbols (%s)', $repository->getName());
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title)
+      ->setHeaderIcon('fa-pencil');
 
     $form = id(new AphrontFormView())
-      ->setUser($user)
+      ->setUser($viewer)
       ->appendRemarkupInstructions($this->getInstructions())
       ->appendChild(
         id(new AphrontFormTextControl())
@@ -94,19 +88,22 @@ final class DiffusionRepositorySymbolsController
           ->setValue(pht('Save'))
           ->addCancelButton($edit_uri));
 
-    $object_box = id(new PHUIObjectBoxView())
-      ->setHeaderText($title)
+    $form_box = id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Symbols'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->setForm($form)
       ->setFormErrors($errors);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $object_box,
-      ),
-      array(
-        'title' => $title,
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter(array(
+        $form_box,
       ));
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
   private function getInstructions() {

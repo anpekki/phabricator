@@ -104,22 +104,43 @@ final class PhabricatorConfigEditController
     if ($errors) {
       $error_view = id(new PHUIInfoView())
         ->setErrors($errors);
-    } else if ($option->getHidden()) {
-      $msg = pht(
+    }
+
+    $status_items = array();
+    if ($option->getHidden()) {
+      $message = pht(
         'This configuration is hidden and can not be edited or viewed from '.
         'the web interface.');
 
-      $error_view = id(new PHUIInfoView())
-        ->setTitle(pht('Configuration Hidden'))
-        ->setSeverity(PHUIInfoView::SEVERITY_WARNING)
-        ->appendChild(phutil_tag('p', array(), $msg));
+      $status_items[] = id(new PHUIStatusItemView())
+        ->setIcon('fa-eye-slash red')
+        ->setTarget(phutil_tag('strong', array(), pht('Configuration Hidden')))
+        ->setNote($message);
     } else if ($option->getLocked()) {
+      $message = $option->getLockedMessage();
 
-      $msg = $option->getLockedMessage();
-      $error_view = id(new PHUIInfoView())
-        ->setTitle(pht('Configuration Locked'))
-        ->setSeverity(PHUIInfoView::SEVERITY_NOTICE)
-        ->appendChild(phutil_tag('p', array(), $msg));
+      $status_items[] = id(new PHUIStatusItemView())
+        ->setIcon('fa-lock red')
+        ->setTarget(phutil_tag('strong', array(), pht('Configuration Locked')))
+        ->setNote($message);
+    }
+
+    if ($status_items) {
+      $doc_href = PhabricatorEnv::getDoclink(
+        'Configuration Guide: Locked and Hidden Configuration');
+
+      $doc_link = phutil_tag(
+        'a',
+        array(
+          'href' => $doc_href,
+          'target' => '_blank',
+        ),
+        pht('Configuration Guide: Locked and Hidden Configuration'));
+
+      $status_items[] = id(new PHUIStatusItemView())
+        ->setIcon('fa-book')
+        ->setTarget(phutil_tag('strong', array(), pht('Learn More')))
+        ->setNote($doc_link);
     }
 
     if ($option->getHidden() || $option->getLocked()) {
@@ -144,11 +165,30 @@ final class PhabricatorConfigEditController
 
     $form
       ->setUser($viewer)
-      ->addHiddenInput('issue', $request->getStr('issue'))
-      ->appendChild(
+      ->addHiddenInput('issue', $request->getStr('issue'));
+
+    if ($status_items) {
+      $status_view = id(new PHUIStatusListView());
+
+      foreach ($status_items as $status_item) {
+        $status_view->addItem($status_item);
+      }
+
+      $form->appendControl(
         id(new AphrontFormMarkupControl())
-          ->setLabel(pht('Description'))
-          ->setValue($description));
+          ->setValue($status_view));
+    }
+
+    $description = $option->getDescription();
+    if (strlen($description)) {
+      $description_view = new PHUIRemarkupView($viewer, $description);
+
+      $form
+        ->appendChild(
+          id(new AphrontFormMarkupControl())
+            ->setLabel(pht('Description'))
+            ->setValue($description_view));
+    }
 
     if ($group) {
       $extra = $group->renderContextualDescription(
@@ -187,15 +227,17 @@ final class PhabricatorConfigEditController
           ->setValue($examples));
     }
 
-    $title = pht('Edit %s', $key);
+    $title = pht('Edit Option: %s', $key);
+    $header_icon = 'fa-pencil';
     $short = pht('Edit');
 
     $form_box = id(new PHUIObjectBoxView())
-      ->setHeaderText($title)
+      ->setHeaderText(pht('Config Option'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->setForm($form);
 
     if ($error_view) {
-       $form_box->setInfoView($error_view);
+      $form_box->setInfoView($error_view);
     }
 
     $crumbs = $this->buildApplicationCrumbs();
@@ -206,21 +248,25 @@ final class PhabricatorConfigEditController
     }
 
     $crumbs->addTextCrumb($key, '/config/edit/'.$key);
+    $crumbs->setBorder(true);
 
     $timeline = $this->buildTransactionTimeline(
       $config_entry,
       new PhabricatorConfigTransactionQuery());
     $timeline->setShouldTerminate(true);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $form_box,
-        $timeline,
-      ),
-      array(
-        'title' => $title,
-      ));
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title)
+      ->setHeaderIcon($header_icon);
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter($form_box);
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
   private function readRequest(

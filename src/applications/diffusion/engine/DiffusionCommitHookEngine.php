@@ -10,6 +10,7 @@
  */
 final class DiffusionCommitHookEngine extends Phobject {
 
+  const ENV_REPOSITORY = 'PHABRICATOR_REPOSITORY';
   const ENV_USER = 'PHABRICATOR_USER';
   const ENV_REMOTE_ADDRESS = 'PHABRICATOR_REMOTE_ADDRESS';
   const ENV_REMOTE_PROTOCOL = 'PHABRICATOR_REMOTE_PROTOCOL';
@@ -54,15 +55,6 @@ final class DiffusionCommitHookEngine extends Phobject {
 
   public function getRemoteAddress() {
     return $this->remoteAddress;
-  }
-
-  private function getRemoteAddressForLog() {
-    // If whatever we have here isn't a valid IPv4 address, just store `null`.
-    // Older versions of PHP return `-1` on failure instead of `false`.
-    $remote_address = $this->getRemoteAddress();
-    $remote_address = max(0, ip2long($remote_address));
-    $remote_address = nonempty($remote_address, null);
-    return $remote_address;
   }
 
   public function setSubversionTransactionInfo($transaction, $repository) {
@@ -308,6 +300,7 @@ final class DiffusionCommitHookEngine extends Phobject {
     $rules = null;
     $blocking_effect = null;
     $blocked_update = null;
+    $blocking_xscript = null;
     foreach ($updates as $update) {
       $adapter = id(clone $adapter_template)
         ->setPushLog($update);
@@ -332,6 +325,7 @@ final class DiffusionCommitHookEngine extends Phobject {
           if ($effect->getAction() == $block_action) {
             $blocking_effect = $effect;
             $blocked_update = $update;
+            $blocking_xscript = $xscript;
             break;
           }
         }
@@ -357,13 +351,16 @@ final class DiffusionCommitHookEngine extends Phobject {
       throw new DiffusionCommitHookRejectException(
         pht(
           "This push was rejected by Herald push rule %s.\n".
-          "Change: %s\n".
-          "  Rule: %s\n".
-          "Reason: %s",
+          "    Change: %s\n".
+          "      Rule: %s\n".
+          "    Reason: %s\n".
+          "Transcript: %s",
           $rule->getMonogram(),
           $blocked_name,
           $rule->getName(),
-          $message));
+          $message,
+          PhabricatorEnv::getProductionURI(
+            '/herald/transcript/'.$blocking_xscript->getID().'/')));
     }
   }
 
@@ -614,7 +611,7 @@ final class DiffusionCommitHookEngine extends Phobject {
     $console = PhutilConsole::getConsole();
 
     $env = array(
-      'PHABRICATOR_REPOSITORY' => $this->getRepository()->getCallsign(),
+      self::ENV_REPOSITORY => $this->getRepository()->getPHID(),
       self::ENV_USER => $this->getViewer()->getUsername(),
       self::ENV_REMOTE_PROTOCOL => $this->getRemoteProtocol(),
       self::ENV_REMOTE_ADDRESS => $this->getRemoteAddress(),
@@ -773,10 +770,10 @@ final class DiffusionCommitHookEngine extends Phobject {
       }
 
       $stray_heads = array();
+      $head_map = array();
 
       if ($old_heads && !$new_heads) {
         // This is a branch deletion with "--close-branch".
-        $head_map = array();
         foreach ($old_heads as $old_head) {
           $head_map[$old_head] = array(self::EMPTY_HASH);
         }
@@ -801,7 +798,6 @@ final class DiffusionCommitHookEngine extends Phobject {
             '{node}\1');
         }
 
-        $head_map = array();
         foreach (new FutureIterator($dfutures) as $future_head => $dfuture) {
           list($stdout) = $dfuture->resolvex();
           $descendant_heads = array_filter(explode("\1", $stdout));
@@ -1073,7 +1069,7 @@ final class DiffusionCommitHookEngine extends Phobject {
     $viewer = $this->getViewer();
     return PhabricatorRepositoryPushEvent::initializeNewEvent($viewer)
       ->setRepositoryPHID($this->getRepository()->getPHID())
-      ->setRemoteAddress($this->getRemoteAddressForLog())
+      ->setRemoteAddress($this->getRemoteAddress())
       ->setRemoteProtocol($this->getRemoteProtocol())
       ->setEpoch(time());
   }

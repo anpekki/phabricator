@@ -34,9 +34,7 @@ final class PhabricatorBadgesSearchEngine
       id(new PhabricatorSearchCheckboxesField())
         ->setKey('qualities')
         ->setLabel(pht('Quality'))
-        ->setOptions(
-          id(new PhabricatorBadgesBadge())
-            ->getQualityNameMap()),
+        ->setOptions(PhabricatorBadgesQuality::getDropdownQualityMap()),
       id(new PhabricatorSearchCheckboxesField())
         ->setKey('statuses')
         ->setLabel(pht('Status'))
@@ -84,7 +82,7 @@ final class PhabricatorBadgesSearchEngine
         return $query->setParameter(
           'statuses',
           array(
-            PhabricatorBadgesBadge::STATUS_OPEN,
+            PhabricatorBadgesBadge::STATUS_ACTIVE,
           ));
     }
 
@@ -110,8 +108,9 @@ final class PhabricatorBadgesSearchEngine
 
     $list = id(new PHUIObjectItemListView());
     foreach ($badges as $badge) {
+      $quality_name = PhabricatorBadgesQuality::getQualityName(
+        $badge->getQuality());
 
-      $quality = idx($badge->getQualityNameMap(), $badge->getQuality());
       $mini_badge = id(new PHUIBadgeMiniView())
         ->setHeader($badge->getName())
         ->setIcon($badge->getIcon())
@@ -121,10 +120,10 @@ final class PhabricatorBadgesSearchEngine
         ->setHeader($badge->getName())
         ->setBadge($mini_badge)
         ->setHref('/badges/view/'.$badge->getID().'/')
-        ->addAttribute($quality)
+        ->addAttribute($quality_name)
         ->addAttribute($badge->getFlavor());
 
-      if ($badge->isClosed()) {
+      if ($badge->isArchived()) {
         $item->setDisabled(true);
         $item->addIcon('fa-ban', pht('Archived'));
       }
@@ -138,6 +137,26 @@ final class PhabricatorBadgesSearchEngine
 
     return $result;
 
+  }
+
+  protected function getNewUserBody() {
+    $create_button = id(new PHUIButtonView())
+      ->setTag('a')
+      ->setText(pht('Create a Badge'))
+      ->setHref('/badges/create/')
+      ->setColor(PHUIButtonView::GREEN);
+
+    $icon = $this->getApplication()->getIcon();
+    $app_name =  $this->getApplication()->getName();
+    $view = id(new PHUIBigInfoView())
+      ->setIcon($icon)
+      ->setTitle(pht('Welcome to %s', $app_name))
+      ->setDescription(
+        pht('Badges let you award and distinguish special users '.
+          'throughout your instance.'))
+      ->addAction($create_button);
+
+      return $view;
   }
 
 }

@@ -3,9 +3,8 @@
 final class PhabricatorAuthListController
   extends PhabricatorAuthProviderConfigController {
 
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $this->getViewer();
 
     $configs = id(new PhabricatorAuthProviderConfigQuery())
       ->setViewer($viewer)
@@ -93,6 +92,7 @@ final class PhabricatorAuthListController
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb(pht('Auth Providers'));
+    $crumbs->setBorder(true);
 
     $domains_key = 'auth.email-domains';
     $domains_link = $this->renderConfigLink($domains_key);
@@ -109,7 +109,7 @@ final class PhabricatorAuthListController
         'only users with a verified email address at one of these %s '.
         'allowed domain(s) will be able to register an account: %s',
         $domains_link,
-        new PhutilNumber(count($domains_value)),
+        phutil_count($domains_value),
         phutil_tag('strong', array(), implode(', ', $domains_value)));
     } else {
       $issues[] = pht(
@@ -147,34 +147,37 @@ final class PhabricatorAuthListController
       ->setSeverity($severity)
       ->setErrors($issues);
 
-    $image = id(new PHUIIconView())
-          ->setIconFont('fa-plus');
     $button = id(new PHUIButtonView())
         ->setTag('a')
         ->setColor(PHUIButtonView::SIMPLE)
         ->setHref($this->getApplicationURI('config/new/'))
-        ->setIcon($image)
+        ->setIcon('fa-plus')
         ->setDisabled(!$can_manage)
         ->setText(pht('Add Provider'));
 
-    $header = id(new PHUIHeaderView())
-      ->setHeader(pht('Authentication Providers'))
-      ->addActionLink($button);
-
     $list->setFlush(true);
     $list = id(new PHUIObjectBoxView())
-      ->setHeader($header)
-      ->setInfoView($warning)
+      ->setHeaderText(pht('Providers'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->appendChild($list);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
+    $title = pht('Auth Providers');
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title)
+      ->setHeaderIcon('fa-key')
+      ->addActionLink($button);
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter(array(
+        $warning,
         $list,
-      ),
-      array(
-        'title' => pht('Authentication Providers'),
       ));
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
   private function renderConfigLink($key) {

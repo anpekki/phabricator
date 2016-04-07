@@ -44,4 +44,24 @@ abstract class PhabricatorStandardCustomFieldTokenizer
       ->setDatasource($this->getDatasource());
   }
 
+  public function getHeraldFieldStandardType() {
+    return HeraldField::STANDARD_PHID_LIST;
+  }
+
+  public function getHeraldDatasource() {
+    return $this->getDatasource();
+  }
+
+  protected function getHTTPParameterType() {
+    return new AphrontPHIDListHTTPParameterType();
+  }
+
+  protected function newConduitSearchParameterType() {
+    return new ConduitPHIDListParameterType();
+  }
+
+  protected function newConduitEditParameterType() {
+    return new ConduitPHIDListParameterType();
+  }
+
 }

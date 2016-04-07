@@ -2,8 +2,7 @@
  * @provides aphront-table-view-css
  */
 
-.device-phone .aphront-table-wrap,
-.device-tablet .aphront-table-wrap {
+.aphront-table-wrap {
   overflow-x: auto;
 }
 
@@ -15,7 +14,15 @@
   border-bottom: 1px solid {$blueborder};
 }
 
-.aphront-table-view td.aphront-table-notice {
+.aphront-table-view-fixed {
+  table-layout: fixed;
+}
+
+.aphront-table-view-fixed th {
+  box-sizing: border-box;
+}
+
+.aphront-table-notice {
   padding: 12px 16px;
   font-size: {$normalfontsize};
   color: {$darkbluetext};
@@ -61,6 +68,7 @@ th.aphront-table-view-sortable-selected {
   text-align: right;
   color: {$bluetext};
   font-weight: bold;
+  vertical-align: top;
 }
 
 .aphront-table-view td {
@@ -154,6 +162,10 @@ th.aphront-table-view-sortable-selected {
   color: {$darkbluetext};
 }
 
+.aphront-table-view td.top {
+  vertical-align: top;
+}
+
 .aphront-table-view td.wide {
   white-space: normal;
   width: 100%;
@@ -235,10 +247,11 @@ span.single-display-line-content {
 }
 
 .aphront-table-view tr.no-data td {
-  padding: 12px;
+  padding: 16px;
   text-align: center;
   color: {$lightgreytext};
   font-style: italic;
+  font-size: {$normalfontsize};
 }
 
 .aphront-table-view td.thumb img {

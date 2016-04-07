@@ -6,9 +6,14 @@ final class DiffusionLastModifiedController extends DiffusionController {
     return true;
   }
 
-  protected function processDiffusionRequest(AphrontRequest $request) {
+  public function handleRequest(AphrontRequest $request) {
+    $response = $this->loadDiffusionContext();
+    if ($response) {
+      return $response;
+    }
+
+    $viewer = $this->getViewer();
     $drequest = $this->getDiffusionRequest();
-    $viewer = $request->getUser();
 
     $paths = $request->getStr('paths');
     try {
@@ -98,7 +103,7 @@ final class DiffusionLastModifiedController extends DiffusionController {
       $modified = DiffusionView::linkCommit(
         $drequest->getRepository(),
         $commit->getCommitIdentifier());
-      $date = phabricator_datetime($epoch, $viewer);
+      $date = $viewer->formatShortDateTime($epoch);
     } else {
       $modified = '';
       $date = '';

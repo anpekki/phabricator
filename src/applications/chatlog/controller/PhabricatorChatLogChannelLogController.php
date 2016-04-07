@@ -213,7 +213,7 @@ final class PhabricatorChatLogChannelLogController
       ->setTag('a')
       ->setHref('#latest')
       ->setText(pht('Jump to Bottom'))
-      ->setIconFont('fa-arrow-circle-down');
+      ->setIcon('fa-arrow-circle-down');
 
     $jump_target = phutil_tag(
       'div',
@@ -248,14 +248,11 @@ final class PhabricatorChatLogChannelLogController
       $form,
       '#');
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $box,
-      ),
-      array(
-        'title' => pht('Channel Log'),
-      ));
+    return $this->newPage()
+      ->setTitle(pht('Channel Log'))
+      ->setCrumbs($crumbs)
+      ->appendChild($box);
+
   }
 
   /**

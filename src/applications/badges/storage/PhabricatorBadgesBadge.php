@@ -7,7 +7,8 @@ final class PhabricatorBadgesBadge extends PhabricatorBadgesDAO
     PhabricatorSubscribableInterface,
     PhabricatorTokenReceiverInterface,
     PhabricatorFlaggableInterface,
-    PhabricatorDestructibleInterface {
+    PhabricatorDestructibleInterface,
+    PhabricatorConduitResultInterface {
 
   protected $name;
   protected $flavor;
@@ -19,43 +20,18 @@ final class PhabricatorBadgesBadge extends PhabricatorBadgesDAO
   protected $status;
   protected $creatorPHID;
 
-  private $recipientPHIDs = self::ATTACHABLE;
+  private $awards = self::ATTACHABLE;
 
-  const STATUS_OPEN = 'open';
-  const STATUS_CLOSED = 'closed';
+  const STATUS_ACTIVE = 'open';
+  const STATUS_ARCHIVED = 'closed';
 
   const DEFAULT_ICON = 'fa-star';
-  const DEFAULT_QUALITY = 'green';
-
-  const POOR = 'grey';
-  const COMMON = 'white';
-  const UNCOMMON = 'green';
-  const RARE = 'blue';
-  const EPIC = 'indigo';
-  const LEGENDARY = 'orange';
-  const HEIRLOOM = 'yellow';
 
   public static function getStatusNameMap() {
     return array(
-      self::STATUS_OPEN => pht('Active'),
-      self::STATUS_CLOSED => pht('Archived'),
+      self::STATUS_ACTIVE => pht('Active'),
+      self::STATUS_ARCHIVED => pht('Archived'),
     );
-  }
-
-  public static function getQualityNameMap() {
-    return array(
-      self::POOR => pht('Poor'),
-      self::COMMON => pht('Common'),
-      self::UNCOMMON => pht('Uncommon'),
-      self::RARE => pht('Rare'),
-      self::EPIC => pht('Epic'),
-      self::LEGENDARY => pht('Legendary'),
-      self::HEIRLOOM => pht('Heirloom'),
-    );
-  }
-
-  public static function getIconNameMap() {
-    return PhabricatorBadgesIcon::getIconMap();
   }
 
   public static function initializeNewBadge(PhabricatorUser $actor) {
@@ -71,10 +47,12 @@ final class PhabricatorBadgesBadge extends PhabricatorBadgesDAO
 
     return id(new PhabricatorBadgesBadge())
       ->setIcon(self::DEFAULT_ICON)
-      ->setQuality(self::DEFAULT_QUALITY)
+      ->setQuality(PhabricatorBadgesQuality::DEFAULT_QUALITY)
       ->setCreatorPHID($actor->getPHID())
       ->setEditPolicy($edit_policy)
-      ->setStatus(self::STATUS_OPEN);
+      ->setFlavor('')
+      ->setDescription('')
+      ->setStatus(self::STATUS_ACTIVE);
   }
 
   protected function getConfiguration() {
@@ -85,7 +63,7 @@ final class PhabricatorBadgesBadge extends PhabricatorBadgesDAO
         'flavor' => 'text255',
         'description' => 'text',
         'icon' => 'text255',
-        'quality' => 'text255',
+        'quality' => 'uint32',
         'status' => 'text32',
         'mailKey' => 'bytes20',
       ),
@@ -102,17 +80,21 @@ final class PhabricatorBadgesBadge extends PhabricatorBadgesDAO
       PhabricatorPHID::generateNewPHID(PhabricatorBadgesPHIDType::TYPECONST);
   }
 
-  public function isClosed() {
-    return ($this->getStatus() == self::STATUS_CLOSED);
+  public function isArchived() {
+    return ($this->getStatus() == self::STATUS_ARCHIVED);
   }
 
-  public function attachRecipientPHIDs(array $phids) {
-    $this->recipientPHIDs = $phids;
+  public function attachAwards(array $awards) {
+    $this->awards = $awards;
     return $this;
   }
 
-  public function getRecipientPHIDs() {
-    return $this->assertAttached($this->recipientPHIDs);
+  public function getAwards() {
+    return $this->assertAttached($this->awards);
+  }
+
+  public function getViewURI() {
+    return '/badges/view/'.$this->getID().'/';
   }
 
   public function save() {
@@ -181,14 +163,6 @@ final class PhabricatorBadgesBadge extends PhabricatorBadgesDAO
     return ($this->creatorPHID == $phid);
   }
 
-  public function shouldShowSubscribersProperty() {
-    return true;
-  }
-
-  public function shouldAllowSubscription($phid) {
-    return true;
-  }
-
 
 /* -(  PhabricatorTokenReceiverInterface  )---------------------------------- */
 
@@ -205,9 +179,50 @@ final class PhabricatorBadgesBadge extends PhabricatorBadgesDAO
   public function destroyObjectPermanently(
     PhabricatorDestructionEngine $engine) {
 
+    $awards = id(new PhabricatorBadgesAwardQuery())
+      ->setViewer($engine->getViewer())
+      ->withBadgePHIDs(array($this->getPHID()))
+      ->execute();
+
+    foreach ($awards as $award) {
+      $engine->destroyObjectPermanently($award);
+    }
+
     $this->openTransaction();
       $this->delete();
     $this->saveTransaction();
+  }
+
+/* -(  PhabricatorConduitResultInterface  )---------------------------------- */
+
+
+  public function getFieldSpecificationsForConduit() {
+    return array(
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('name')
+        ->setType('string')
+        ->setDescription(pht('The name of the badge.')),
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('creatorPHID')
+        ->setType('phid')
+        ->setDescription(pht('User PHID of the creator.')),
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('status')
+        ->setType('string')
+        ->setDescription(pht('Active or archived status of the badge.')),
+    );
+  }
+
+  public function getFieldValuesForConduit() {
+    return array(
+      'name' => $this->getName(),
+      'creatorPHID' => $this->getCreatorPHID(),
+      'status' => $this->getStatus(),
+    );
+  }
+
+  public function getConduitSearchAttachments() {
+    return array();
   }
 
 }

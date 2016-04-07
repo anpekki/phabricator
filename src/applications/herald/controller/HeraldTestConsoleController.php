@@ -98,23 +98,31 @@ final class HeraldTestConsoleController extends HeraldController {
           ->setValue(pht('Test Rules')));
 
     $box = id(new PHUIObjectBoxView())
-      ->setHeaderText(pht('Herald Test Console'))
       ->setFormErrors($errors)
       ->setForm($form);
 
-    $nav = $this->buildSideNavView();
-    $nav->selectFilter('test');
-    $nav->appendChild($box);
-
     $crumbs = id($this->buildApplicationCrumbs())
-      ->addTextCrumb(pht('Test Console'));
-    $nav->setCrumbs($crumbs);
+      ->addTextCrumb(pht('Test Console'))
+      ->setBorder(true);
 
-    return $this->buildApplicationPage(
-      $nav,
-      array(
-        'title' => pht('Test Console'),
+    $title = pht('Test Console');
+
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title)
+      ->setHeaderIcon('fa-desktop');
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter($box);
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild(
+        array(
+          $view,
       ));
+
   }
 
 }

@@ -62,9 +62,7 @@ final class PhabricatorApplicationTransactionPublishWorker
     PhabricatorApplicationTransactionInterface $object) {
     $data = $this->getTaskData();
 
-    $daemon_source = PhabricatorContentSource::newForSource(
-      PhabricatorContentSource::SOURCE_DAEMON,
-      array());
+    $daemon_source = $this->newContentSource();
 
     $viewer = PhabricatorUser::getOmnipotentUser();
     $editor = $object->getApplicationTransactionEditor()
@@ -92,8 +90,15 @@ final class PhabricatorApplicationTransactionPublishWorker
 
     $viewer = PhabricatorUser::getOmnipotentUser();
 
-    $type = phid_get_subtype(head($xaction_phids));
-    $xactions = $this->buildTransactionQuery($type)
+    $query = PhabricatorApplicationTransactionQuery::newQueryForObject($object);
+    if (!$query) {
+      throw new PhabricatorWorkerPermanentFailureException(
+        pht(
+          'Unable to load query for transaction object "%s"!',
+          $object->getPHID()));
+    }
+
+    $xactions = $query
       ->setViewer($viewer)
       ->withPHIDs($xaction_phids)
       ->needComments(true)
@@ -109,31 +114,6 @@ final class PhabricatorApplicationTransactionPublishWorker
     }
 
     return array_select_keys($xactions, $xaction_phids);
-  }
-
-
-  /**
-   * Build a new transaction query of the appropriate class so we can load
-   * the transactions.
-   */
-  private function buildTransactionQuery($type) {
-    $queries = id(new PhutilClassMapQuery())
-      ->setAncestorClass('PhabricatorApplicationTransactionQuery')
-      ->execute();
-
-    foreach ($queries as $query) {
-      $query_type = $query
-        ->getTemplateApplicationTransaction()
-        ->getApplicationTransactionType();
-      if ($query_type == $type) {
-        return $query;
-      }
-    }
-
-    throw new PhabricatorWorkerPermanentFailureException(
-      pht(
-        'Unable to load query for transaction type "%s"!',
-        $type));
   }
 
 }

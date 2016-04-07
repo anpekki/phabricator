@@ -115,6 +115,16 @@ final class PHUIPropertyListView extends AphrontView {
     $this->invokedWillRenderEvent = true;
   }
 
+  public function hasAnyProperties() {
+    $this->invokeWillRenderEvent();
+
+    if ($this->parts) {
+      return true;
+    }
+
+    return false;
+  }
+
   public function render() {
     $this->invokeWillRenderEvent();
 
@@ -127,6 +137,7 @@ final class PHUIPropertyListView extends AphrontView {
     // If we have an action list, make sure we render a property part, even
     // if there are no properties. Otherwise, the action list won't render.
     if ($this->actionList) {
+      $this->classes[] = 'phui-property-list-has-actions';
       $have_property_part = false;
       foreach ($this->parts as $part) {
         if ($part['type'] == 'property') {
@@ -247,7 +258,7 @@ final class PHUIPropertyListView extends AphrontView {
     $name = $part['name'];
     if ($part['icon']) {
       $icon = id(new PHUIIconView())
-        ->setIconFont($part['icon'].' bluegrey');
+        ->setIcon($part['icon'].' bluegrey');
       $name = phutil_tag(
         'span',
         array(

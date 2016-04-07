@@ -7,8 +7,10 @@ final class PHUIObjectItemListView extends AphrontTagView {
   private $pager;
   private $noDataString;
   private $flush;
+  private $simple;
   private $allowEmptyList;
   private $states;
+  private $itemClass = 'phui-object-item-standard';
 
   public function setAllowEmptyList($allow_empty_list) {
     $this->allowEmptyList = $allow_empty_list;
@@ -34,6 +36,11 @@ final class PHUIObjectItemListView extends AphrontTagView {
     return $this;
   }
 
+  public function setSimple($simple) {
+    $this->simple = $simple;
+    return $this;
+  }
+
   public function setNoDataString($no_data_string) {
     $this->noDataString = $no_data_string;
     return $this;
@@ -46,6 +53,11 @@ final class PHUIObjectItemListView extends AphrontTagView {
 
   public function setStates($states) {
     $this->states = $states;
+    return $this;
+  }
+
+  public function setItemClass($item_class) {
+    $this->itemClass = $item_class;
     return $this;
   }
 
@@ -62,6 +74,9 @@ final class PHUIObjectItemListView extends AphrontTagView {
     }
     if ($this->flush) {
       $classes[] = 'phui-object-list-flush';
+    }
+    if ($this->simple) {
+      $classes[] = 'phui-object-list-simple';
     }
 
     return array(
@@ -89,6 +104,11 @@ final class PHUIObjectItemListView extends AphrontTagView {
           $item->setUser($viewer);
         }
       }
+
+      foreach ($this->items as $item) {
+        $item->addClass($this->itemClass);
+      }
+
       $items = $this->items;
     } else if ($this->allowEmptyList) {
       $items = null;

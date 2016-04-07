@@ -11,13 +11,10 @@ final class PhabricatorDaemonLogListView extends AphrontView {
   }
 
   public function render() {
+    $viewer = $this->getViewer();
+
     $rows = array();
 
-    if (!$this->user) {
-      throw new PhutilInvalidStateException('setUser');
-    }
-
-    $env_hash = PhabricatorEnv::calculateEnvironmentHash();
     $list = new PHUIObjectItemListView();
     $list->setFlush(true);
     foreach ($this->daemonLogs as $log) {
@@ -28,20 +25,13 @@ final class PhabricatorDaemonLogListView extends AphrontView {
         ->setObjectName(pht('Daemon %s', $id))
         ->setHeader($log->getDaemon())
         ->setHref("/daemon/log/{$id}/")
-        ->addIcon('none', phabricator_datetime($epoch, $this->user));
+        ->addIcon('none', phabricator_datetime($epoch, $viewer));
 
       $status = $log->getStatus();
       switch ($status) {
         case PhabricatorDaemonLog::STATUS_RUNNING:
-          if ($env_hash != $log->getEnvHash()) {
-            $item->setStatusIcon('fa-warning yellow');
-            $item->addAttribute(pht(
-              'This daemon is running with an out of date configuration and '.
-              'should be restarted.'));
-          } else {
-            $item->setStatusIcon('fa-rocket green');
-            $item->addAttribute(pht('This daemon is running.'));
-          }
+          $item->setStatusIcon('fa-rocket green');
+          $item->addAttribute(pht('This daemon is running.'));
           break;
         case PhabricatorDaemonLog::STATUS_DEAD:
           $item->setStatusIcon('fa-warning red');

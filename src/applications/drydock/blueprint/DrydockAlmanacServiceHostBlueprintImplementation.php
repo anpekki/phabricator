@@ -15,6 +15,10 @@ final class DrydockAlmanacServiceHostBlueprintImplementation
     return pht('Almanac Hosts');
   }
 
+  public function getBlueprintIcon() {
+    return 'fa-server';
+  }
+
   public function getDescription() {
     return pht(
       'Allows Drydock to lease existing hosts defined in an Almanac service '.
@@ -109,11 +113,6 @@ final class DrydockAlmanacServiceHostBlueprintImplementation
     DrydockBlueprint $blueprint,
     DrydockResource $resource,
     DrydockLease $lease) {
-
-    if (!DrydockSlotLock::isLockFree($this->getLeaseSlotLock($resource))) {
-      return false;
-    }
-
     return true;
   }
 
@@ -124,7 +123,6 @@ final class DrydockAlmanacServiceHostBlueprintImplementation
 
     $lease
       ->setActivateWhenAcquired(true)
-      ->needSlotLock($this->getLeaseSlotLock($resource))
       ->acquireOnResource($resource);
   }
 
@@ -144,11 +142,6 @@ final class DrydockAlmanacServiceHostBlueprintImplementation
     // We don't create anything when activating a lease, so we don't need to
     // throw anything away.
     return;
-  }
-
-  private function getLeaseSlotLock(DrydockResource $resource) {
-    $resource_phid = $resource->getPHID();
-    return "almanac.host.lease({$resource_phid})";
   }
 
   public function getType() {
@@ -188,14 +181,14 @@ final class DrydockAlmanacServiceHostBlueprintImplementation
     }
   }
 
-  public function getFieldSpecifications() {
+  protected function getCustomFieldSpecifications() {
     return array(
       'almanacServicePHIDs' => array(
         'name' => pht('Almanac Services'),
         'type' => 'datasource',
         'datasource.class' => 'AlmanacServiceDatasource',
         'datasource.parameters' => array(
-          'serviceClasses' => $this->getAlmanacServiceClasses(),
+          'serviceTypes' => $this->getAlmanacServiceTypes(),
         ),
         'required' => true,
       ),
@@ -207,7 +200,7 @@ final class DrydockAlmanacServiceHostBlueprintImplementation
         'credential.type' =>
           PassphraseSSHPrivateKeyTextCredentialType::CREDENTIAL_TYPE,
       ),
-    ) + parent::getFieldSpecifications();
+    );
   }
 
   private function loadServices(DrydockBlueprint $blueprint) {
@@ -224,7 +217,7 @@ final class DrydockAlmanacServiceHostBlueprintImplementation
       $services = id(new AlmanacServiceQuery())
         ->setViewer($viewer)
         ->withPHIDs($service_phids)
-        ->withServiceClasses($this->getAlmanacServiceClasses())
+        ->withServiceTypes($this->getAlmanacServiceTypes())
         ->needBindings(true)
         ->execute();
       $services = mpull($services, null, 'getPHID');
@@ -278,6 +271,11 @@ final class DrydockAlmanacServiceHostBlueprintImplementation
 
       $free = array();
       foreach ($bindings as $binding) {
+        // Don't consider disabled bindings to be available.
+        if ($binding->getIsDisabled()) {
+          continue;
+        }
+
         if (empty($allocated_phids[$binding->getPHID()])) {
           $free[] = $binding;
         }
@@ -289,9 +287,9 @@ final class DrydockAlmanacServiceHostBlueprintImplementation
     return $this->freeBindings;
   }
 
-  private function getAlmanacServiceClasses() {
+  private function getAlmanacServiceTypes() {
     return array(
-      'AlmanacDrydockPoolServiceType',
+      AlmanacDrydockPoolServiceType::SERVICETYPE,
     );
   }
 

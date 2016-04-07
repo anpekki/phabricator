@@ -3,23 +3,15 @@
 final class DiffusionRepositoryEditAutomationController
   extends DiffusionRepositoryEditController {
 
-  protected function processDiffusionRequest(AphrontRequest $request) {
-    $viewer = $request->getUser();
-    $drequest = $this->diffusionRequest;
-    $repository = $drequest->getRepository();
-
-    $repository = id(new PhabricatorRepositoryQuery())
-      ->setViewer($viewer)
-      ->requireCapabilities(
-        array(
-          PhabricatorPolicyCapability::CAN_VIEW,
-          PhabricatorPolicyCapability::CAN_EDIT,
-        ))
-      ->withIDs(array($repository->getID()))
-      ->executeOne();
-    if (!$repository) {
-      return new Aphront404Response();
+  public function handleRequest(AphrontRequest $request) {
+    $response = $this->loadDiffusionContextForEdit();
+    if ($response) {
+      return $response;
     }
+
+    $viewer = $this->getViewer();
+    $drequest = $this->getDiffusionRequest();
+    $repository = $drequest->getRepository();
 
     if (!$repository->supportsAutomation()) {
       return new Aphront404Response();
@@ -57,6 +49,10 @@ final class DiffusionRepositoryEditAutomationController
 
     $title = pht('Edit %s', $repository->getName());
 
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title)
+      ->setHeaderIcon('fa-pencil');
+
     $form = id(new AphrontFormView())
       ->setUser($viewer)
       ->appendRemarkupInstructions(
@@ -77,18 +73,21 @@ final class DiffusionRepositoryEditAutomationController
           ->setValue(pht('Save'))
           ->addCancelButton($edit_uri));
 
-    $object_box = id(new PHUIObjectBoxView())
-      ->setHeaderText($title)
+    $form_box = id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Automation'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->setForm($form);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $object_box,
-      ),
-      array(
-        'title' => $title,
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter(array(
+        $form_box,
       ));
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
 }

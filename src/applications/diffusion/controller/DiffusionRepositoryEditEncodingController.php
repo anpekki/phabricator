@@ -3,24 +3,15 @@
 final class DiffusionRepositoryEditEncodingController
   extends DiffusionRepositoryEditController {
 
-  protected function processDiffusionRequest(AphrontRequest $request) {
-    $user = $request->getUser();
-    $drequest = $this->diffusionRequest;
-    $repository = $drequest->getRepository();
-
-    $repository = id(new PhabricatorRepositoryQuery())
-      ->setViewer($user)
-      ->requireCapabilities(
-        array(
-          PhabricatorPolicyCapability::CAN_VIEW,
-          PhabricatorPolicyCapability::CAN_EDIT,
-        ))
-      ->withIDs(array($repository->getID()))
-      ->executeOne();
-
-    if (!$repository) {
-      return new Aphront404Response();
+  public function handleRequest(AphrontRequest $request) {
+    $response = $this->loadDiffusionContextForEdit();
+    if ($response) {
+      return $response;
     }
+
+    $user = $this->getViewer();
+    $drequest = $this->getDiffusionRequest();
+    $repository = $drequest->getRepository();
 
     $edit_uri = $this->getRepositoryControllerURI($repository, 'edit/');
 
@@ -59,6 +50,9 @@ final class DiffusionRepositoryEditEncodingController
     $crumbs->addTextCrumb(pht('Edit Encoding'));
 
     $title = pht('Edit %s', $repository->getName());
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title)
+      ->setHeaderIcon('fa-pencil');
 
     $form = id(new AphrontFormView())
       ->setUser($user)
@@ -74,19 +68,22 @@ final class DiffusionRepositoryEditEncodingController
           ->setValue(pht('Save Encoding'))
           ->addCancelButton($edit_uri));
 
-    $object_box = id(new PHUIObjectBoxView())
-      ->setHeaderText($title)
+    $form_box = id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Encoding'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->setForm($form)
       ->setFormErrors($errors);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $object_box,
-      ),
-      array(
-        'title' => $title,
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter(array(
+        $form_box,
       ));
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
   private function getEncodingInstructions() {

@@ -18,96 +18,140 @@ final class DifferentialRevisionOperationController
 
     $detail_uri = "/D{$id}";
 
+    $op = new DrydockLandRepositoryOperation();
+    $barrier = $op->getBarrierToLanding($viewer, $revision);
+    if ($barrier) {
+      return $this->newDialog()
+        ->setTitle($barrier['title'])
+        ->appendParagraph($barrier['body'])
+        ->addCancelButton($detail_uri);
+    }
+
+    $diff = $revision->getActiveDiff();
     $repository = $revision->getRepository();
-    if (!$repository) {
-      return $this->rejectOperation(
-        $revision,
-        pht('No Repository'),
-        pht(
-          'This revision is not associated with a known repository. Only '.
-          'revisions associated with a tracked repository can be landed '.
-          'automatically.'));
+
+    $default_ref = $this->loadDefaultRef($repository, $diff);
+
+    if ($default_ref) {
+      $v_ref = array($default_ref->getPHID());
+    } else {
+      $v_ref = array();
     }
 
-    if (!$repository->canPerformAutomation()) {
-      return $this->rejectOperation(
-        $revision,
-        pht('No Repository Automation'),
-        pht(
-          'The repository this revision is associated with ("%s") is not '.
-          'configured to support automation. Configure automation for the '.
-          'repository to enable revisions to be landed automatically.',
-          $repository->getMonogram()));
-    }
+    $e_ref = true;
 
-    // TODO: At some point we should allow installs to give "land reviewed
-    // code" permission to more users than "push any commit", because it is
-    // a much less powerful operation. For now, just require push so this
-    // doesn't do anything users can't do on their own.
-    $can_push = PhabricatorPolicyFilter::hasCapability(
-      $viewer,
-      $repository,
-      DiffusionPushCapability::CAPABILITY);
-    if (!$can_push) {
-      return $this->rejectOperation(
-        $revision,
-        pht('Unable to Push'),
-        pht(
-          'You do not have permission to push to the repository this '.
-          'revision is associated with ("%s"), so you can not land it.',
-          $repository->getMonogram()));
-    }
-
+    $errors = array();
     if ($request->isFormPost()) {
-      // NOTE: The operation is locked to the current active diff, so if the
-      // revision is updated before the operation applies nothing sneaky
-      // occurs.
 
-      $diff = $revision->getActiveDiff();
+      $v_ref = $request->getArr('refPHIDs');
+      $ref_phid = head($v_ref);
+      if (!strlen($ref_phid)) {
+        $e_ref = pht('Required');
+        $errors[] = pht(
+          'You must select a branch to land this revision onto.');
+      } else {
+        $ref = $this->newRefQuery($repository)
+          ->withPHIDs(array($ref_phid))
+          ->executeOne();
+        if (!$ref) {
+          $e_ref = pht('Invalid');
+          $errors[] = pht(
+            'You must select a branch from this repository to land this '.
+            'revision onto.');
+        }
+      }
 
-      $op = new DrydockLandRepositoryOperation();
+      if (!$errors) {
+        // NOTE: The operation is locked to the current active diff, so if the
+        // revision is updated before the operation applies nothing sneaky
+        // occurs.
 
-      $operation = DrydockRepositoryOperation::initializeNewOperation($op)
-        ->setAuthorPHID($viewer->getPHID())
-        ->setObjectPHID($revision->getPHID())
-        ->setRepositoryPHID($repository->getPHID())
-        ->setRepositoryTarget('branch:master')
-        ->setProperty('differential.diffPHID', $diff->getPHID());
+        $target = 'branch:'.$ref->getRefName();
 
-      $operation->save();
-      $operation->scheduleUpdate();
+        $operation = DrydockRepositoryOperation::initializeNewOperation($op)
+          ->setAuthorPHID($viewer->getPHID())
+          ->setObjectPHID($revision->getPHID())
+          ->setRepositoryPHID($repository->getPHID())
+          ->setRepositoryTarget($target)
+          ->setProperty('differential.diffPHID', $diff->getPHID());
 
-      return id(new AphrontRedirectResponse())
-        ->setURI($detail_uri);
+        $operation->save();
+        $operation->scheduleUpdate();
+
+        return id(new AphrontRedirectResponse())
+          ->setURI($detail_uri);
+      }
     }
+
+    $ref_datasource = id(new DiffusionRefDatasource())
+      ->setParameters(
+        array(
+          'repositoryPHIDs' => array($repository->getPHID()),
+          'refTypes' => $this->getTargetableRefTypes(),
+        ));
+
+    $form = id(new AphrontFormView())
+      ->setUser($viewer)
+      ->appendRemarkupInstructions(
+        pht(
+          '(NOTE) This feature is new and experimental.'))
+      ->appendControl(
+        id(new AphrontFormTokenizerControl())
+          ->setLabel(pht('Onto Branch'))
+          ->setName('refPHIDs')
+          ->setLimit(1)
+          ->setError($e_ref)
+          ->setValue($v_ref)
+          ->setDatasource($ref_datasource));
 
     return $this->newDialog()
+      ->setWidth(AphrontDialogView::WIDTH_FORM)
       ->setTitle(pht('Land Revision'))
-      ->appendParagraph(
-        pht(
-          'In theory, this will do approximately what `arc land` would do. '.
-          'In practice, that is almost certainly not what it will actually '.
-          'do.'))
-      ->appendParagraph(
-        pht(
-          'THIS FEATURE IS EXPERIMENTAL AND DANGEROUS! USE IT AT YOUR '.
-          'OWN RISK!'))
+      ->setErrors($errors)
+      ->appendForm($form)
       ->addCancelButton($detail_uri)
-      ->addSubmitButton(pht('Mutate Repository Unpredictably'));
+      ->addSubmitButton(pht('Land Revision'));
   }
 
-  private function rejectOperation(
-    DifferentialRevision $revision,
-    $title,
-    $body) {
+  private function newRefQuery(PhabricatorRepository $repository) {
+    $viewer = $this->getViewer();
 
-    $id = $revision->getID();
-    $detail_uri = "/D{$id}";
+    return id(new PhabricatorRepositoryRefCursorQuery())
+      ->setViewer($viewer)
+      ->withRepositoryPHIDs(array($repository->getPHID()))
+      ->withRefTypes($this->getTargetableRefTypes());
+  }
 
-    return $this->newDialog()
-      ->setTitle($title)
-      ->appendParagraph($body)
-      ->addCancelButton($detail_uri);
+  private function getTargetableRefTypes() {
+    return array(
+      PhabricatorRepositoryRefCursor::TYPE_BRANCH,
+    );
+  }
+
+  private function loadDefaultRef(
+    PhabricatorRepository $repository,
+    DifferentialDiff $diff) {
+    $default_name = $this->getDefaultRefName($repository, $diff);
+
+    if (!strlen($default_name)) {
+      return null;
+    }
+
+    return $this->newRefQuery($repository)
+      ->withRefNames(array($default_name))
+      ->executeOne();
+  }
+
+  private function getDefaultRefName(
+    PhabricatorRepository $repository,
+    DifferentialDiff $diff) {
+
+    $onto = $diff->loadTargetBranch();
+    if ($onto !== null) {
+      return $onto;
+    }
+
+    return $repository->getDefaultBranch();
   }
 
 }

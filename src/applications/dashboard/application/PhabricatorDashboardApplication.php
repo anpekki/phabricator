@@ -14,7 +14,7 @@ final class PhabricatorDashboardApplication extends PhabricatorApplication {
     return pht('Create Custom Pages');
   }
 
-  public function getFontIcon() {
+  public function getIcon() {
     return 'fa-dashboard';
   }
 
@@ -25,8 +25,8 @@ final class PhabricatorDashboardApplication extends PhabricatorApplication {
         '(?:query/(?P<queryKey>[^/]+)/)?'
           => 'PhabricatorDashboardListController',
         'view/(?P<id>\d+)/' => 'PhabricatorDashboardViewController',
+        'archive/(?P<id>\d+)/' => 'PhabricatorDashboardArchiveController',
         'manage/(?P<id>\d+)/' => 'PhabricatorDashboardManageController',
-        'history/(?P<id>\d+)/' => 'PhabricatorDashboardHistoryController',
         'create/' => 'PhabricatorDashboardEditController',
         'copy/(?:(?P<id>\d+)/)?' => 'PhabricatorDashboardCopyController',
         'edit/(?:(?P<id>\d+)/)?' => 'PhabricatorDashboardEditController',

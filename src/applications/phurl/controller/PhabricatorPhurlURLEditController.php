@@ -7,20 +7,24 @@ final class PhabricatorPhurlURLEditController
     $id = $request->getURIData('id');
     $is_create = !$id;
 
-    $viewer = $request->getViewer();
+    $viewer = $this->getViewer();
     $user_phid = $viewer->getPHID();
-    $error_name = true;
     $error_long_url = true;
+    $error_alias = null;
     $validation_exception = null;
 
     $next_workflow = $request->getStr('next');
     $uri_query = $request->getStr('query');
 
     if ($is_create) {
+      $this->requireApplicationCapability(
+        PhabricatorPhurlURLCreateCapability::CAPABILITY);
+
       $url = PhabricatorPhurlURL::initializeNewPhurlURL(
         $viewer);
       $submit_label = pht('Create');
       $page_title = pht('Shorten URL');
+      $header_icon = 'fa-plus-square';
       $subscribers = array();
       $cancel_uri = $this->getApplicationURI();
     } else {
@@ -39,7 +43,8 @@ final class PhabricatorPhurlURLEditController
       }
 
       $submit_label = pht('Update');
-      $page_title   = pht('Update URL');
+      $page_title   = pht('Edit URL: %s', $url->getName());
+      $header_icon = 'fa-pencil';
 
       $subscribers = PhabricatorSubscribersQuery::loadSubscribersForPHID(
         $url->getPHID());
@@ -58,6 +63,7 @@ final class PhabricatorPhurlURLEditController
 
     $name = $url->getName();
     $long_url = $url->getLongURL();
+    $alias = $url->getAlias();
     $description = $url->getDescription();
     $edit_policy = $url->getEditPolicy();
     $view_policy = $url->getViewPolicy();
@@ -67,6 +73,7 @@ final class PhabricatorPhurlURLEditController
       $xactions = array();
       $name = $request->getStr('name');
       $long_url = $request->getStr('longURL');
+      $alias = $request->getStr('alias');
       $projects = $request->getArr('projects');
       $description = $request->getStr('description');
       $subscribers = $request->getArr('subscribers');
@@ -83,6 +90,11 @@ final class PhabricatorPhurlURLEditController
         ->setTransactionType(
           PhabricatorPhurlURLTransaction::TYPE_URL)
         ->setNewValue($long_url);
+
+      $xactions[] = id(new PhabricatorPhurlURLTransaction())
+        ->setTransactionType(
+          PhabricatorPhurlURLTransaction::TYPE_ALIAS)
+        ->setNewValue($alias);
 
       $xactions[] = id(new PhabricatorPhurlURLTransaction())
         ->setTransactionType(
@@ -123,10 +135,10 @@ final class PhabricatorPhurlURLEditController
           ->setURI($url->getURI());
       } catch (PhabricatorApplicationTransactionValidationException $ex) {
         $validation_exception = $ex;
-        $error_name = $ex->getShortMessage(
-          PhabricatorPhurlURLTransaction::TYPE_NAME);
         $error_long_url = $ex->getShortMessage(
           PhabricatorPhurlURLTransaction::TYPE_URL);
+        $error_alias = $ex->getShortMessage(
+          PhabricatorPhurlURLTransaction::TYPE_ALIAS);
       }
     }
 
@@ -138,14 +150,19 @@ final class PhabricatorPhurlURLEditController
     $name = id(new AphrontFormTextControl())
       ->setLabel(pht('Name'))
       ->setName('name')
-      ->setValue($name)
-      ->setError($error_name);
+      ->setValue($name);
 
     $long_url = id(new AphrontFormTextControl())
       ->setLabel(pht('URL'))
       ->setName('longURL')
       ->setValue($long_url)
       ->setError($error_long_url);
+
+    $alias = id(new AphrontFormTextControl())
+      ->setLabel(pht('Alias'))
+      ->setName('alias')
+      ->setValue($alias)
+      ->setError($error_alias);
 
     $projects = id(new AphrontFormTokenizerControl())
       ->setLabel(pht('Projects'))
@@ -187,6 +204,7 @@ final class PhabricatorPhurlURLEditController
       ->setUser($viewer)
       ->appendChild($name)
       ->appendChild($long_url)
+      ->appendChild($alias)
       ->appendControl($view_policies)
       ->appendControl($edit_policies)
       ->appendControl($subscribers)
@@ -222,19 +240,27 @@ final class PhabricatorPhurlURLEditController
     }
 
     $crumbs->addTextCrumb($page_title);
+    $crumbs->setBorder(true);
 
     $object_box = id(new PHUIObjectBoxView())
-      ->setHeaderText($page_title)
+      ->setHeaderText(pht('URL'))
       ->setValidationException($validation_exception)
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->appendChild($form);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
+    $header = id(new PHUIHeaderView())
+      ->setHeader($page_title)
+      ->setHeaderIcon($header_icon);
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter(array(
         $object_box,
-      ),
-      array(
-        'title' => $page_title,
       ));
+
+    return $this->newPage()
+      ->setTitle($page_title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 }

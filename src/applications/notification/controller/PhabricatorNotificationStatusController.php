@@ -24,15 +24,12 @@ final class PhabricatorNotificationStatusController
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb(pht('Status'));
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $status,
-      ),
-      array(
-        'title' => pht('Notification Server Status'),
-        'device' => false,
-      ));
+    $title = pht('Notification Server Status');
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($status);
   }
 
   private function renderServerStatus(array $status) {
@@ -63,7 +60,7 @@ final class PhabricatorNotificationStatusController
       ));
 
     $test_icon = id(new PHUIIconView())
-      ->setIconFont('fa-exclamation-triangle');
+      ->setIcon('fa-exclamation-triangle');
 
     $test_button = id(new PHUIButtonView())
         ->setTag('a')

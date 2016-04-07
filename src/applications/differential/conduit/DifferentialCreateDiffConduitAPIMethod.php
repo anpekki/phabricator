@@ -137,14 +137,14 @@ final class DifferentialCreateDiffConduitAPIMethod
     );
 
     $xactions = array(
-      id(new DifferentialTransaction())
+      id(new DifferentialDiffTransaction())
         ->setTransactionType(DifferentialDiffTransaction::TYPE_DIFF_CREATE)
         ->setNewValue($diff_data_dict),
     );
 
     id(new DifferentialDiffEditor())
       ->setActor($viewer)
-      ->setContentSourceFromConduitRequest($request)
+      ->setContentSource($request->newContentSource())
       ->setContinueOnNoEffect(true)
       ->applyTransactions($diff, $xactions);
 

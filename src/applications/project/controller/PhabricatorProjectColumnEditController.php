@@ -82,11 +82,14 @@ final class PhabricatorProjectColumnEditController
       $xactions = array();
 
       $type_name = PhabricatorProjectColumnTransaction::TYPE_NAME;
-      $xactions[] = id(new PhabricatorProjectColumnTransaction())
-        ->setTransactionType($type_name)
-        ->setNewValue($v_name);
-
       $type_limit = PhabricatorProjectColumnTransaction::TYPE_LIMIT;
+
+      if (!$column->getProxy()) {
+        $xactions[] = id(new PhabricatorProjectColumnTransaction())
+          ->setTransactionType($type_name)
+          ->setNewValue($v_name);
+      }
+
       $xactions[] = id(new PhabricatorProjectColumnTransaction())
         ->setTransactionType($type_limit)
         ->setNewValue($v_limit);
@@ -95,6 +98,7 @@ final class PhabricatorProjectColumnEditController
         $editor = id(new PhabricatorProjectColumnTransactionEditor())
           ->setActor($viewer)
           ->setContinueOnNoEffect(true)
+          ->setContinueOnMissingFields(true)
           ->setContentSourceFromRequest($request)
           ->applyTransactions($column, $xactions);
         return id(new AphrontRedirectResponse())->setURI($view_uri);
@@ -105,26 +109,26 @@ final class PhabricatorProjectColumnEditController
       }
     }
 
-    $form = new AphrontFormView();
-    $form
-      ->setUser($request->getUser())
-      ->appendChild(
+    $form = id(new AphrontFormView())
+      ->setUser($request->getUser());
+
+    if (!$column->getProxy()) {
+      $form->appendChild(
         id(new AphrontFormTextControl())
           ->setValue($v_name)
           ->setLabel(pht('Name'))
           ->setName('name')
-          ->setError($e_name)
-          ->setCaption(
-            pht('This will be displayed as the header of the column.')))
-      ->appendChild(
-        id(new AphrontFormTextControl())
-          ->setValue($v_limit)
-          ->setLabel(pht('Point Limit'))
-          ->setName('limit')
-          ->setError($e_limit)
-          ->setCaption(
-            pht('Maximum number of points of tasks allowed in the column.')));
+          ->setError($e_name));
+    }
 
+    $form->appendChild(
+      id(new AphrontFormTextControl())
+        ->setValue($v_limit)
+        ->setLabel(pht('Point Limit'))
+        ->setName('limit')
+        ->setError($e_limit)
+        ->setCaption(
+          pht('Maximum number of points of tasks allowed in the column.')));
 
     if ($is_new) {
       $title = pht('Create Column');
@@ -134,23 +138,13 @@ final class PhabricatorProjectColumnEditController
       $submit = pht('Save Column');
     }
 
-    $form->appendChild(
-      id(new AphrontFormSubmitControl())
-        ->setValue($submit)
-        ->addCancelButton($view_uri));
-
-    $form_box = id(new PHUIObjectBoxView())
-      ->setHeaderText($title)
+    return $this->newDialog()
+      ->setWidth(AphrontDialogView::WIDTH_FORM)
+      ->setTitle($title)
+      ->appendForm($form)
       ->setValidationException($validation_exception)
-      ->setForm($form);
+      ->addCancelButton($view_uri)
+      ->addSubmitButton($submit);
 
-    $nav = $this->buildIconNavView($project);
-    $nav->appendChild($form_box);
-
-    return $this->buildApplicationPage(
-      $nav,
-      array(
-        'title' => $title,
-      ));
   }
 }

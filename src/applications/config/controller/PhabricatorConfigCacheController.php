@@ -25,11 +25,9 @@ final class PhabricatorConfigCacheController
         $data_box,
       ));
 
-    return $this->buildApplicationPage(
-      $nav,
-      array(
-        'title' => $title,
-      ));
+    return $this->newPage()
+      ->setTitle($title)
+      ->appendChild($nav);
   }
 
   private function renderCodeBox() {
@@ -39,15 +37,12 @@ final class PhabricatorConfigCacheController
 
     $this->renderCommonProperties($properties, $cache);
 
-    $purge_icon = id(new PHUIIconView())
-      ->setIconFont('fa-exclamation-triangle');
-
     $purge_button = id(new PHUIButtonView())
       ->setText(pht('Purge Caches'))
       ->setHref('/config/cache/purge/')
       ->setTag('a')
       ->setWorkflow(true)
-      ->setIcon($purge_icon);
+      ->setIcon('fa-exclamation-triangle');
 
     $header = id(new PHUIHeaderView())
       ->setHeader(pht('Opcode Cache'))
@@ -161,7 +156,7 @@ final class PhabricatorConfigCacheController
 
   private function renderYes($info) {
     return array(
-      id(new PHUIIconView())->setIconFont('fa-check', 'green'),
+      id(new PHUIIconView())->setIcon('fa-check', 'green'),
       ' ',
       $info,
     );
@@ -169,7 +164,7 @@ final class PhabricatorConfigCacheController
 
   private function renderNo($info) {
     return array(
-      id(new PHUIIconView())->setIconFont('fa-times-circle', 'red'),
+      id(new PHUIIconView())->setIcon('fa-times-circle', 'red'),
       ' ',
       $info,
     );
@@ -177,7 +172,7 @@ final class PhabricatorConfigCacheController
 
   private function renderInfo($info) {
     return array(
-      id(new PHUIIconView())->setIconFont('fa-info-circle', 'grey'),
+      id(new PHUIIconView())->setIcon('fa-info-circle', 'grey'),
       ' ',
       $info,
     );

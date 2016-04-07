@@ -31,7 +31,7 @@ final class DrydockConsoleController extends DrydockController {
     $menu->addItem(
       id(new PHUIObjectItemView())
         ->setHeader(pht('Blueprints'))
-        ->setFontIcon('fa-map-o')
+        ->setIcon('fa-map-o')
         ->setHref($this->getApplicationURI('blueprint/'))
         ->addAttribute(
           pht(
@@ -41,7 +41,7 @@ final class DrydockConsoleController extends DrydockController {
     $menu->addItem(
       id(new PHUIObjectItemView())
         ->setHeader(pht('Resources'))
-        ->setFontIcon('fa-map')
+        ->setIcon('fa-map')
         ->setHref($this->getApplicationURI('resource/'))
         ->addAttribute(
           pht('View and manage resources Drydock has built, like hosts.')));
@@ -49,32 +49,38 @@ final class DrydockConsoleController extends DrydockController {
     $menu->addItem(
       id(new PHUIObjectItemView())
         ->setHeader(pht('Leases'))
-        ->setFontIcon('fa-link')
+        ->setIcon('fa-link')
         ->setHref($this->getApplicationURI('lease/'))
         ->addAttribute(pht('Manage leases on resources.')));
 
     $menu->addItem(
       id(new PHUIObjectItemView())
         ->setHeader(pht('Repository Operations'))
-        ->setFontIcon('fa-fighter-jet')
+        ->setIcon('fa-fighter-jet')
         ->setHref($this->getApplicationURI('operation/'))
         ->addAttribute(pht('Review the repository operation queue.')));
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb(pht('Console'));
+    $crumbs->setBorder(true);
 
     $box = id(new PHUIObjectBoxView())
-      ->setHeaderText(pht('Drydock Console'))
       ->setObjectList($menu);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $box,
-      ),
-      array(
-        'title'  => pht('Drydock Console'),
-      ));
+    $title = pht('Drydock Console');
+
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title)
+      ->setHeaderIcon('fa-truck');
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter($box);
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
 }

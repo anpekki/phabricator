@@ -138,15 +138,16 @@ final class PhabricatorPeopleQuery
     if ($this->needProfile) {
       $user_list = mpull($users, null, 'getPHID');
       $profiles = new PhabricatorUserProfile();
-      $profiles = $profiles->loadAllWhere('userPHID IN (%Ls)',
+      $profiles = $profiles->loadAllWhere(
+        'userPHID IN (%Ls)',
         array_keys($user_list));
 
       $profiles = mpull($profiles, null, 'getUserPHID');
       foreach ($user_list as $user_phid => $user) {
         $profile = idx($profiles, $user_phid);
+
         if (!$profile) {
-          $profile = new PhabricatorUserProfile();
-          $profile->setUserPHID($user_phid);
+          $profile = PhabricatorUserProfile::initializeNewProfile($user);
         }
 
         $user->attachUserProfile($profile);
@@ -154,20 +155,17 @@ final class PhabricatorPeopleQuery
     }
 
     if ($this->needBadges) {
-      $edge_query = id(new PhabricatorEdgeQuery())
-        ->withSourcePHIDs(mpull($users, 'getPHID'))
-        ->withEdgeTypes(
-          array(
-            PhabricatorRecipientHasBadgeEdgeType::EDGECONST,
-          ));
-      $edge_query->execute();
+      $awards = id(new PhabricatorBadgesAwardQuery())
+        ->setViewer($this->getViewer())
+        ->withRecipientPHIDs(mpull($users, 'getPHID'))
+        ->execute();
+
+      $awards = mgroup($awards, 'getRecipientPHID');
 
       foreach ($users as $user) {
-        $phids = $edge_query->getDestinationPHIDs(
-          array(
-            $user->getPHID(),
-          ));
-        $user->attachBadgePHIDs($phids);
+        $user_awards = idx($awards, $user->getPHID(), array());
+        $badge_phids = mpull($user_awards, 'getBadgePHID');
+        $user->attachBadgePHIDs($badge_phids);
       }
     }
 
@@ -413,6 +411,10 @@ final class PhabricatorPeopleQuery
     // self-heal over time.
     $min_range = PhabricatorTime::getNow();
     $max_range = $min_range + phutil_units('72 hours in seconds');
+
+    // NOTE: We don't need to generate ghosts here, because we only care if
+    // the user is attending, and you can't attend a ghost event: RSVP'ing
+    // to it creates a real event.
 
     $events = id(new PhabricatorCalendarEventQuery())
       ->setViewer(PhabricatorUser::getOmnipotentUser())

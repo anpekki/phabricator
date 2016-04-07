@@ -10,6 +10,7 @@ final class HarbormasterBuild extends HarbormasterDAO
   protected $buildStatus;
   protected $buildGeneration;
   protected $buildParameters = array();
+  protected $initiatorPHID;
   protected $planAutoKey;
 
   private $buildable = self::ATTACHABLE;
@@ -164,6 +165,7 @@ final class HarbormasterBuild extends HarbormasterDAO
         'buildStatus' => 'text32',
         'buildGeneration' => 'uint32',
         'planAutoKey' => 'text32?',
+        'initiatorPHID' => 'phid?',
       ),
       self::CONFIG_KEY_SCHEMA => array(
         'key_buildable' => array(
@@ -232,23 +234,6 @@ final class HarbormasterBuild extends HarbormasterDAO
     return ($this->getPlanAutoKey() !== null);
   }
 
-  public function createLog(
-    HarbormasterBuildTarget $build_target,
-    $log_source,
-    $log_type) {
-
-    $log_source = id(new PhutilUTF8StringTruncator())
-      ->setMaximumBytes(250)
-      ->truncateString($log_source);
-
-    $log = HarbormasterBuildLog::initializeNewBuildLog($build_target)
-      ->setLogSource($log_source)
-      ->setLogType($log_type)
-      ->save();
-
-    return $log;
-  }
-
   public function retrieveVariablesFromBuild() {
     $results = array(
       'buildable.diff' => null,
@@ -260,6 +245,7 @@ final class HarbormasterBuild extends HarbormasterDAO
       'repository.uri' => null,
       'step.timestamp' => null,
       'build.id' => null,
+      'initiator.phid' => null,
     );
 
     foreach ($this->getBuildParameters() as $key => $value) {
@@ -275,6 +261,7 @@ final class HarbormasterBuild extends HarbormasterDAO
 
     $results['step.timestamp'] = time();
     $results['build.id'] = $this->getID();
+    $results['initiator.phid'] = $this->getInitiatorPHID();
 
     return $results;
   }
@@ -289,6 +276,9 @@ final class HarbormasterBuild extends HarbormasterDAO
       'step.timestamp' => pht('The current UNIX timestamp.'),
       'build.id' => pht('The ID of the current build.'),
       'target.phid' => pht('The PHID of the current build target.'),
+      'initiator.phid' => pht(
+        'The PHID of the user or Object that initiated the build, '.
+        'if applicable.'),
     );
 
     foreach ($objects as $object) {
@@ -314,6 +304,11 @@ final class HarbormasterBuild extends HarbormasterDAO
 
   public function isPaused() {
     return ($this->getBuildStatus() == self::STATUS_PAUSED);
+  }
+
+  public function getURI() {
+    $id = $this->getID();
+    return "/harbormaster/build/{$id}/";
   }
 
 
@@ -441,6 +436,42 @@ final class HarbormasterBuild extends HarbormasterDAO
     }
 
     return $this;
+  }
+
+  public function canIssueCommand(PhabricatorUser $viewer, $command) {
+    try {
+      $this->assertCanIssueCommand($viewer, $command);
+      return true;
+    } catch (Exception $ex) {
+      return false;
+    }
+  }
+
+  public function assertCanIssueCommand(PhabricatorUser $viewer, $command) {
+    $need_edit = false;
+    switch ($command) {
+      case HarbormasterBuildCommand::COMMAND_RESTART:
+        break;
+      case HarbormasterBuildCommand::COMMAND_PAUSE:
+      case HarbormasterBuildCommand::COMMAND_RESUME:
+      case HarbormasterBuildCommand::COMMAND_ABORT:
+        $need_edit = true;
+        break;
+      default:
+        throw new Exception(
+          pht(
+            'Invalid Harbormaster build command "%s".',
+            $command));
+    }
+
+    // Issuing these commands requires that you be able to edit the build, to
+    // prevent enemy engineers from sabotaging your builds. See T9614.
+    if ($need_edit) {
+      PhabricatorPolicyFilter::requireCapability(
+        $viewer,
+        $this->getBuildPlan(),
+        PhabricatorPolicyCapability::CAN_EDIT);
+    }
   }
 
 

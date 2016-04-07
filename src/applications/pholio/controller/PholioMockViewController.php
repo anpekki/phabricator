@@ -57,7 +57,8 @@ final class PholioMockViewController extends PholioController {
       ->setHeader($title)
       ->setUser($viewer)
       ->setStatus($header_icon, $header_color, $header_name)
-      ->setPolicyObject($mock);
+      ->setPolicyObject($mock)
+      ->setHeaderIcon('fa-camera-retro');
 
     $timeline = $this->buildTransactionTimeline(
       $mock,
@@ -65,8 +66,8 @@ final class PholioMockViewController extends PholioController {
       $engine);
     $timeline->setMock($mock);
 
-    $actions = $this->buildActionView($mock);
-    $properties = $this->buildPropertyView($mock, $engine, $actions);
+    $curtain = $this->buildCurtainView($mock);
+    $details = $this->buildDescriptionView($mock, $engine);
 
     require_celerity_resource('pholio-css');
     require_celerity_resource('pholio-inline-comments-css');
@@ -78,57 +79,52 @@ final class PholioMockViewController extends PholioController {
       ->setUser($viewer)
       ->setMock($mock)
       ->setImageID($image_id);
-    $this->addExtraQuicksandConfig(
-      array('mockViewConfig' => $mock_view->getBehaviorConfig()));
 
     $output = id(new PHUIObjectBoxView())
-      ->setHeaderText(pht('Image'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->appendChild($mock_view);
 
     $add_comment = $this->buildAddCommentView($mock, $comment_form_id);
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb('M'.$mock->getID(), '/M'.$mock->getID());
-
-    $object_box = id(new PHUIObjectBoxView())
-      ->setHeader($header)
-      ->addPropertyList($properties);
+    $crumbs->setBorder(true);
 
     $thumb_grid = id(new PholioMockThumbGridView())
       ->setUser($viewer)
       ->setMock($mock);
 
-    $content = array(
-      $crumbs,
-      $object_box,
-      $output,
-      $thumb_grid,
-      $timeline,
-      $add_comment,
-    );
-
-    return $this->buildApplicationPage(
-      $content,
-      array(
-        'title' => 'M'.$mock->getID().' '.$title,
-        'pageObjects' => array($mock->getPHID()),
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setCurtain($curtain)
+      ->setMainColumn(array(
+        $output,
+        $thumb_grid,
+        $details,
+        $timeline,
+        $add_comment,
       ));
+
+    return $this->newPage()
+      ->setTitle('M'.$mock->getID().' '.$title)
+      ->setCrumbs($crumbs)
+      ->setPageObjectPHIDs(array($mock->getPHID()))
+      ->addQuicksandConfig(
+        array('mockViewConfig' => $mock_view->getBehaviorConfig()))
+      ->appendChild($view);
   }
 
-  private function buildActionView(PholioMock $mock) {
+  private function buildCurtainView(PholioMock $mock) {
     $viewer = $this->getViewer();
 
-    $actions = id(new PhabricatorActionListView())
-      ->setUser($viewer)
-      ->setObjectURI($this->getRequest()->getRequestURI())
-      ->setObject($mock);
+    $curtain = $this->newCurtainView($mock);
 
     $can_edit = PhabricatorPolicyFilter::hasCapability(
       $viewer,
       $mock,
       PhabricatorPolicyCapability::CAN_EDIT);
 
-    $actions->addAction(
+    $curtain->addAction(
       id(new PhabricatorActionView())
       ->setIcon('fa-pencil')
       ->setName(pht('Edit Mock'))
@@ -136,7 +132,25 @@ final class PholioMockViewController extends PholioController {
       ->setDisabled(!$can_edit)
       ->setWorkflow(!$can_edit));
 
-    $actions->addAction(
+    if ($mock->isClosed()) {
+      $curtain->addAction(
+        id(new PhabricatorActionView())
+        ->setIcon('fa-check')
+        ->setName(pht('Open Mock'))
+        ->setHref($this->getApplicationURI('/archive/'.$mock->getID().'/'))
+        ->setDisabled(!$can_edit)
+        ->setWorkflow(true));
+    } else {
+      $curtain->addAction(
+        id(new PhabricatorActionView())
+        ->setIcon('fa-ban')
+        ->setName(pht('Close Mock'))
+        ->setHref($this->getApplicationURI('/archive/'.$mock->getID().'/'))
+        ->setDisabled(!$can_edit)
+        ->setWorkflow(true));
+    }
+
+    $curtain->addAction(
       id(new PhabricatorActionView())
       ->setIcon('fa-anchor')
       ->setName(pht('Edit Maniphest Tasks'))
@@ -144,45 +158,56 @@ final class PholioMockViewController extends PholioController {
       ->setDisabled(!$viewer->isLoggedIn())
       ->setWorkflow(true));
 
-    return $actions;
-  }
-
-  private function buildPropertyView(
-    PholioMock $mock,
-    PhabricatorMarkupEngine $engine,
-    PhabricatorActionListView $actions) {
-
-    $viewer = $this->getViewer();
-
-    $properties = id(new PHUIPropertyListView())
-      ->setUser($viewer)
-      ->setObject($mock)
-      ->setActionList($actions);
-
-    $properties->addProperty(
-      pht('Author'),
-      $viewer->renderHandle($mock->getAuthorPHID()));
-
-    $properties->addProperty(
-      pht('Created'),
-      phabricator_datetime($mock->getDateCreated(), $viewer));
-
     if ($this->getManiphestTaskPHIDs()) {
-      $properties->addProperty(
-        pht('Maniphest Tasks'),
-        $viewer->renderHandleList($this->getManiphestTaskPHIDs()));
+      $curtain->newPanel()
+        ->setHeaderText(pht('Maniphest Tasks'))
+        ->appendChild(
+          $viewer->renderHandleList($this->getManiphestTaskPHIDs()));
     }
 
-    $properties->invokeWillRenderEvent();
+    $curtain->newPanel()
+      ->setHeaderText(pht('Authored By'))
+      ->appendChild($this->buildAuthorPanel($mock));
 
-    $properties->addSectionHeader(
-        pht('Description'),
-        PHUIPropertyListView::ICON_SUMMARY);
+    return $curtain;
+  }
 
-    $properties->addImageContent(
-        $engine->getOutput($mock, PholioMock::MARKUP_FIELD_DESCRIPTION));
+  private function buildDescriptionView(PholioMock $mock) {
 
-    return $properties;
+    $viewer = $this->getViewer();
+    $properties = id(new PHUIPropertyListView())
+      ->setUser($viewer);
+    $description = $mock->getDescription();
+
+    if (strlen($description)) {
+      $properties->addImageContent($description);
+      return id(new PHUIObjectBoxView())
+        ->setHeaderText(pht('Mock Description'))
+        ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+        ->appendChild($properties);
+    }
+
+    return null;
+  }
+
+  private function buildAuthorPanel(PholioMock $mock) {
+    $viewer = $this->getViewer();
+    $author_phid = $mock->getAuthorPHID();
+    $handles = $viewer->loadHandles(array($author_phid));
+
+    $author_uri = $handles[$author_phid]->getImageURI();
+    $author_href = $handles[$author_phid]->getURI();
+    $author = $viewer->renderHandle($author_phid)->render();
+
+    $content = phutil_tag('strong', array(), $author);
+    $date = phabricator_date($mock->getDateCreated(), $viewer);
+    $content = pht('%s, %s', $content, $date);
+    $authored_by = id(new PHUIHeadThingView())
+      ->setImage($author_uri)
+      ->setImageHref($author_href)
+      ->setContent($content);
+
+    return $authored_by;
   }
 
   private function buildAddCommentView(PholioMock $mock, $comment_form_id) {

@@ -51,6 +51,11 @@ final class DiffusionCommitQuery
    * they queried for.
    */
   public function withIdentifiers(array $identifiers) {
+    // Some workflows (like blame lookups) can pass in large numbers of
+    // duplicate identifiers. We only care about unique identifiers, so
+    // get rid of duplicates immediately.
+    $identifiers = array_fuse($identifiers);
+
     $this->identifiers = $identifiers;
     return $this;
   }
@@ -72,6 +77,7 @@ final class DiffusionCommitQuery
    */
   public function withRepositoryPHIDs(array $phids) {
     $this->repositoryPHIDs = $phids;
+    return $this;
   }
 
   /**
@@ -184,7 +190,7 @@ final class DiffusionCommitQuery
 
       // Build the identifierMap
       if ($this->identifiers !== null) {
-        $ids = array_fuse($this->identifiers);
+        $ids = $this->identifiers;
         $prefixes = array(
           'r'.$commit->getRepository()->getCallsign(),
           'r'.$commit->getRepository()->getCallsign().':',
@@ -358,7 +364,7 @@ final class DiffusionCommitQuery
 
         if ($repo === null) {
           if ($this->defaultRepository) {
-            $repo = $this->defaultRepository->getCallsign();
+            $repo = $this->defaultRepository->getPHID();
           }
         }
 
@@ -369,7 +375,7 @@ final class DiffusionCommitQuery
           $bare[] = $commit_identifier;
         } else {
           $refs[] = array(
-            'callsign' => $repo,
+            'repository' => $repo,
             'identifier' => $commit_identifier,
           );
         }
@@ -386,24 +392,22 @@ final class DiffusionCommitQuery
       }
 
       if ($refs) {
-        $callsigns = ipull($refs, 'callsign');
+        $repositories = ipull($refs, 'repository');
 
         $repos = id(new PhabricatorRepositoryQuery())
           ->setViewer($this->getViewer())
-          ->withIdentifiers($callsigns);
+          ->withIdentifiers($repositories);
         $repos->execute();
 
         $repos = $repos->getIdentifierMap();
-
         foreach ($refs as $key => $ref) {
-          $repo = idx($repos, $ref['callsign']);
-
+          $repo = idx($repos, $ref['repository']);
           if (!$repo) {
             continue;
           }
 
           if ($repo->isSVN()) {
-            if (!ctype_digit($ref['identifier'])) {
+            if (!ctype_digit((string)$ref['identifier'])) {
               continue;
             }
             $sql[] = qsprintf(
@@ -418,11 +422,25 @@ final class DiffusionCommitQuery
             if (strlen($ref['identifier']) < $min_qualified) {
               continue;
             }
-            $sql[] = qsprintf(
-              $conn,
-              '(commit.repositoryID = %d AND commit.commitIdentifier LIKE %>)',
-              $repo->getID(),
-              $ref['identifier']);
+
+            $identifier = $ref['identifier'];
+            if (strlen($identifier) == 40) {
+              // MySQL seems to do slightly better with this version if the
+              // clause, so issue it if we have a full commit hash.
+              $sql[] = qsprintf(
+                $conn,
+                '(commit.repositoryID = %d
+                  AND commit.commitIdentifier = %s)',
+                $repo->getID(),
+                $identifier);
+            } else {
+              $sql[] = qsprintf(
+                $conn,
+                '(commit.repositoryID = %d
+                  AND commit.commitIdentifier LIKE %>)',
+                $repo->getID(),
+                $identifier);
+            }
           }
         }
       }

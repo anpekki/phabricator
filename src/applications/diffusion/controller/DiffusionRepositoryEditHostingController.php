@@ -5,24 +5,16 @@ final class DiffusionRepositoryEditHostingController
 
   private $serve;
 
-  protected function processDiffusionRequest(AphrontRequest $request) {
-    $user = $request->getUser();
-    $drequest = $this->diffusionRequest;
-    $repository = $drequest->getRepository();
-    $this->serve = $request->getURIData('serve');
-
-    $repository = id(new PhabricatorRepositoryQuery())
-      ->setViewer($user)
-      ->requireCapabilities(
-        array(
-          PhabricatorPolicyCapability::CAN_VIEW,
-          PhabricatorPolicyCapability::CAN_EDIT,
-        ))
-      ->withIDs(array($repository->getID()))
-      ->executeOne();
-    if (!$repository) {
-      return new Aphront404Response();
+  public function handleRequest(AphrontRequest $request) {
+    $response = $this->loadDiffusionContextForEdit();
+    if ($response) {
+      return $response;
     }
+
+    $drequest = $this->getDiffusionRequest();
+    $repository = $drequest->getRepository();
+
+    $this->serve = $request->getURIData('serve');
 
     if (!$this->serve) {
       return $this->handleHosting($repository);
@@ -65,6 +57,9 @@ final class DiffusionRepositoryEditHostingController
     $crumbs->addTextCrumb(pht('Edit Hosting'));
 
     $title = pht('Edit Hosting (%s)', $repository->getName());
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title)
+      ->setHeaderIcon('fa-pencil');
 
     $hosted_control = id(new AphrontFormRadioButtonControl())
         ->setName('hosting')
@@ -103,18 +98,21 @@ final class DiffusionRepositoryEditHostingController
           ->setValue(pht('Save and Continue'))
           ->addCancelButton($edit_uri));
 
-    $object_box = id(new PHUIObjectBoxView())
-      ->setHeaderText($title)
+    $form_box = id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Hosting'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->setForm($form);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $object_box,
-      ),
-      array(
-        'title' => $title,
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter(array(
+        $form_box,
       ));
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
   public function handleProtocols(PhabricatorRepository $repository) {
@@ -167,7 +165,9 @@ final class DiffusionRepositoryEditHostingController
     $crumbs->addTextCrumb(pht('Edit Protocols'));
 
     $title = pht('Edit Protocols (%s)', $repository->getName());
-
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title)
+      ->setHeaderIcon('fa-pencil');
 
     $rw_message = pht(
       'Phabricator will serve a read-write copy of this repository.');
@@ -268,18 +268,21 @@ final class DiffusionRepositoryEditHostingController
           ->setValue(pht('Save Changes'))
           ->addCancelButton($prev_uri, pht('Back')));
 
-    $object_box = id(new PHUIObjectBoxView())
-      ->setHeaderText($title)
+    $form_box = id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Protocols'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->setForm($form);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $object_box,
-      ),
-      array(
-        'title' => $title,
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter(array(
+        $form_box,
       ));
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
 }

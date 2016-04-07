@@ -2,15 +2,13 @@
 
 final class DiffusionSymbolController extends DiffusionController {
 
-  private $name;
-
-  protected function processDiffusionRequest(AphrontRequest $request) {
-    $user = $request->getUser();
-    $this->name = $request->getURIData('name');
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $this->getViewer();
+    $name = $request->getURIData('name');
 
     $query = id(new DiffusionSymbolQuery())
-      ->setViewer($user)
-      ->setName($this->name);
+      ->setViewer($viewer)
+      ->setName($name);
 
     if ($request->getStr('context')) {
       $query->setContext($request->getStr('context'));
@@ -48,9 +46,8 @@ final class DiffusionSymbolController extends DiffusionController {
     $symbols = $query->execute();
 
 
-
     $external_query = id(new DiffusionExternalSymbolQuery())
-      ->withNames(array($this->name));
+      ->withNames(array($name));
 
     if ($request->getStr('context')) {
       $external_query->withContexts(array($request->getStr('context')));
@@ -137,15 +134,24 @@ final class DiffusionSymbolController extends DiffusionController {
     $table->setNoDataString(
       pht('No matching symbol could be found in any indexed repository.'));
 
-    $panel = new PHUIObjectBoxView();
-    $panel->setHeaderText(pht('Similar Symbols'));
-    $panel->setTable($table);
+    $header = id(new PHUIHeaderView())
+      ->setHeader(pht('Similar Symbols'))
+      ->setHeaderIcon('fa-bullseye');
 
-    return $this->buildApplicationPage(
-      $panel,
-      array(
-        'title' => pht('Find Symbol'),
+    $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->addTextCrumb(pht('Find Symbol'));
+    $crumbs->setBorder(true);
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter(array(
+        $table,
       ));
+
+    return $this->newPage()
+      ->setTitle(pht('Find Symbol'))
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
 }

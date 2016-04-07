@@ -158,8 +158,10 @@ abstract class PhabricatorDaemonManagementWorkflow
 
     $this->printLaunchingDaemons($daemons, $debug);
 
+    $trace = PhutilArgumentParser::isTraceModeEnabled();
+
     $flags = array();
-    if ($debug || PhabricatorEnv::getEnvConfig('phd.trace')) {
+    if ($trace || PhabricatorEnv::getEnvConfig('phd.trace')) {
       $flags[] = '--trace';
     }
 
@@ -226,7 +228,9 @@ abstract class PhabricatorDaemonManagementWorkflow
         // Retry without sudo
         $console->writeOut(
           "%s\n",
-          pht('sudo command failed. Starting daemon as current user.'));
+          pht(
+            '%s command failed. Starting daemon as current user.',
+            'sudo'));
         $this->executeDaemonLaunchCommand(
           $command,
           $daemon_script_dir,
@@ -265,8 +269,9 @@ abstract class PhabricatorDaemonManagementWorkflow
       if (preg_match('/sudo: a password is required/', $stderr)) {
         throw new Exception(
           pht(
-            'sudo exited with a zero exit code, but emitted output '.
-            'consistent with failure under OSX.'));
+            '%s exited with a zero exit code, but emitted output '.
+            'consistent with failure under OSX.',
+            'sudo'));
       }
     }
   }

@@ -1,8 +1,5 @@
 <?php
 
-/**
- * group paste
- */
 final class PhabricatorPasteViewController extends PhabricatorPasteController {
 
   private $highlightMap;
@@ -37,70 +34,55 @@ final class PhabricatorPasteViewController extends PhabricatorPasteController {
       ->setViewer($viewer)
       ->withIDs(array($id))
       ->needContent(true)
+      ->needRawContent(true)
       ->executeOne();
     if (!$paste) {
       return new Aphront404Response();
     }
 
-    $forks = id(new PhabricatorPasteQuery())
-      ->setViewer($viewer)
-      ->withParentPHIDs(array($paste->getPHID()))
-      ->execute();
-    $fork_phids = mpull($forks, 'getPHID');
-
     $header = $this->buildHeaderView($paste);
-    $actions = $this->buildActionView($viewer, $paste);
-    $properties = $this->buildPropertyView($paste, $fork_phids, $actions);
+    $curtain = $this->buildCurtain($paste);
 
-    $object_box = id(new PHUIObjectBoxView())
-      ->setHeader($header)
-      ->addPropertyList($properties);
-
+    $subheader = $this->buildSubheaderView($paste);
     $source_code = $this->buildSourceCodeView($paste, $this->highlightMap);
 
     require_celerity_resource('paste-css');
-    $source_code = phutil_tag(
-      'div',
-      array(
-        'class' => 'container-of-paste',
-      ),
-      $source_code);
 
-    $crumbs = $this->buildApplicationCrumbs($this->buildSideNavView())
-      ->addTextCrumb('P'.$paste->getID(), '/P'.$paste->getID());
+    $monogram = $paste->getMonogram();
+    $crumbs = $this->buildApplicationCrumbs()
+      ->addTextCrumb($monogram)
+      ->setBorder(true);
 
     $timeline = $this->buildTransactionTimeline(
       $paste,
       new PhabricatorPasteTransactionQuery());
 
-    $is_serious = PhabricatorEnv::getEnvConfig('phabricator.serious-business');
+    $comment_view = id(new PhabricatorPasteEditEngine())
+      ->setViewer($viewer)
+      ->buildEditEngineCommentView($paste);
 
-    $add_comment_header = $is_serious
-      ? pht('Add Comment')
-      : pht('Eat Paste');
+    $timeline->setQuoteRef($monogram);
+    $comment_view->setTransactionTimeline($timeline);
 
-    $draft = PhabricatorDraft::newFromUserAndKey($viewer, $paste->getPHID());
+    $paste_view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setSubheader($subheader)
+      ->setMainColumn(array(
+          $source_code,
+          $timeline,
+          $comment_view,
+        ))
+      ->setCurtain($curtain)
+      ->addClass('ponder-question-view');
 
-    $add_comment_form = id(new PhabricatorApplicationTransactionCommentView())
-      ->setUser($viewer)
-      ->setObjectPHID($paste->getPHID())
-      ->setDraft($draft)
-      ->setHeaderText($add_comment_header)
-      ->setAction($this->getApplicationURI('/comment/'.$paste->getID().'/'))
-      ->setSubmitButtonName(pht('Add Comment'));
-
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $object_box,
-        $source_code,
-        $timeline,
-        $add_comment_form,
-      ),
-      array(
-        'title' => $paste->getFullName(),
-        'pageObjects' => array($paste->getPHID()),
-      ));
+    return $this->newPage()
+      ->setTitle($paste->getFullName())
+      ->setCrumbs($crumbs)
+      ->setPageObjectPHIDs(
+        array(
+          $paste->getPHID(),
+        ))
+      ->appendChild($paste_view);
   }
 
   private function buildHeaderView(PhabricatorPaste $paste) {
@@ -121,85 +103,84 @@ final class PhabricatorPasteViewController extends PhabricatorPasteController {
       ->setHeader($title)
       ->setUser($this->getRequest()->getUser())
       ->setStatus($header_icon, $header_color, $header_name)
-      ->setPolicyObject($paste);
+      ->setPolicyObject($paste)
+      ->setHeaderIcon('fa-clipboard');
 
     return $header;
   }
 
-  private function buildActionView(
-    PhabricatorUser $viewer,
-    PhabricatorPaste $paste) {
+  private function buildCurtain(PhabricatorPaste $paste) {
+    $viewer = $this->getViewer();
+    $curtain = $this->newCurtainView($paste);
 
     $can_edit = PhabricatorPolicyFilter::hasCapability(
       $viewer,
       $paste,
       PhabricatorPolicyCapability::CAN_EDIT);
 
-    $can_fork = $viewer->isLoggedIn();
     $id = $paste->getID();
-    $fork_uri = $this->getApplicationURI('/create/?parent='.$id);
+    $edit_uri = $this->getApplicationURI("edit/{$id}/");
+    $archive_uri = $this->getApplicationURI("archive/{$id}/");
+    $raw_uri = $this->getApplicationURI("raw/{$id}/");
 
-    return id(new PhabricatorActionListView())
-      ->setUser($viewer)
-      ->setObject($paste)
-      ->setObjectURI($this->getRequest()->getRequestURI())
-      ->addAction(
+    $curtain->addAction(
+      id(new PhabricatorActionView())
+        ->setName(pht('Edit Paste'))
+        ->setIcon('fa-pencil')
+        ->setDisabled(!$can_edit)
+        ->setHref($edit_uri));
+
+    if ($paste->isArchived()) {
+      $curtain->addAction(
         id(new PhabricatorActionView())
-          ->setName(pht('Edit Paste'))
-          ->setIcon('fa-pencil')
+          ->setName(pht('Activate Paste'))
+          ->setIcon('fa-check')
           ->setDisabled(!$can_edit)
-          ->setWorkflow(!$can_edit)
-          ->setHref($this->getApplicationURI("edit/{$id}/")))
-      ->addAction(
+          ->setWorkflow($can_edit)
+          ->setHref($archive_uri));
+    } else {
+      $curtain->addAction(
         id(new PhabricatorActionView())
-          ->setName(pht('Fork This Paste'))
-          ->setIcon('fa-code-fork')
-          ->setDisabled(!$can_fork)
-          ->setWorkflow(!$can_fork)
-          ->setHref($fork_uri))
-      ->addAction(
-        id(new PhabricatorActionView())
-          ->setName(pht('View Raw File'))
-          ->setIcon('fa-file-text-o')
-          ->setHref($this->getApplicationURI("raw/{$id}/")));
+          ->setName(pht('Archive Paste'))
+          ->setIcon('fa-ban')
+          ->setDisabled(!$can_edit)
+          ->setWorkflow($can_edit)
+          ->setHref($archive_uri));
+    }
+
+    $curtain->addAction(
+      id(new PhabricatorActionView())
+        ->setName(pht('View Raw File'))
+        ->setIcon('fa-file-text-o')
+        ->setHref($raw_uri));
+
+    return $curtain;
   }
 
-  private function buildPropertyView(
-    PhabricatorPaste $paste,
-    array $child_phids,
-    PhabricatorActionListView $actions) {
+
+  private function buildSubheaderView(
+    PhabricatorPaste $paste) {
     $viewer = $this->getViewer();
 
-    $properties = id(new PHUIPropertyListView())
-      ->setUser($viewer)
-      ->setObject($paste)
-      ->setActionList($actions);
+    $author = $viewer->renderHandle($paste->getAuthorPHID())->render();
+    $date = phabricator_datetime($paste->getDateCreated(), $viewer);
+    $author = phutil_tag('strong', array(), $author);
 
-    $properties->addProperty(
-      pht('Author'),
-      $viewer->renderHandle($paste->getAuthorPHID()));
+    $author_info = id(new PhabricatorPeopleQuery())
+      ->setViewer($viewer)
+      ->withPHIDs(array($paste->getAuthorPHID()))
+      ->needProfileImage(true)
+      ->executeOne();
 
-    $properties->addProperty(
-      pht('Created'),
-      phabricator_datetime($paste->getDateCreated(), $viewer));
+    $image_uri = $author_info->getProfileImageURI();
+    $image_href = '/p/'.$author_info->getUsername();
 
-    if ($paste->getParentPHID()) {
-      $properties->addProperty(
-        pht('Forked From'),
-        $viewer->renderHandle($paste->getParentPHID()));
-    }
+    $content = pht('Authored by %s on %s.', $author, $date);
 
-    if ($child_phids) {
-      $properties->addProperty(
-        pht('Forks'),
-        $viewer->renderHandleList($child_phids));
-    }
-
-    $descriptions = PhabricatorPolicyQuery::renderPolicyDescriptions(
-      $viewer,
-      $paste);
-
-    return $properties;
+    return id(new PHUIHeadThingView())
+      ->setImage($image_uri)
+      ->setImageHref($image_href)
+      ->setContent($content);
   }
 
 }

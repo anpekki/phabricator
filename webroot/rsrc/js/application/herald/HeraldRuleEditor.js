@@ -293,7 +293,18 @@ JX.install('HeraldRuleEditor', {
         },
         function(map) {
           for (var k in map) {
-            build.tokenizer.addToken(k, map[k]);
+            var v = map[k];
+
+            // The control value may be set from wire values from the server,
+            // or a transformed value from another control, or a bare string
+            // value from another control.
+            if (typeof v == 'string') {
+              v = v;
+            } else if (!v.hasOwnProperty('id')) {
+              v = JX.Prefab.transformDatasourceResults(v);
+            }
+
+            build.tokenizer.addToken(k, v);
           }
         }];
     },
@@ -312,7 +323,14 @@ JX.install('HeraldRuleEditor', {
     _newCondition : function(data) {
       var row = this._conditionsRowManager.addRow([]);
       var row_id = this._conditionsRowManager.getRowID(row);
-      this._config.conditions[row_id] = data || [null, null, ''];
+
+      var default_condition = [
+        this._config.default.field,
+        this._config.default.condition,
+        null
+      ];
+      this._config.conditions[row_id] = data || default_condition;
+
       var r = this._conditionsRowManager.updateRow(
         row_id,
         this._renderCondition(row_id));
@@ -358,7 +376,12 @@ JX.install('HeraldRuleEditor', {
     },
 
     _newAction : function(data) {
-      data = data || [];
+      var default_action = [
+        this._config.default.action,
+        null
+      ];
+
+      data = data || default_action;
       var temprow = this._actionsRowManager.addRow([]);
       var row_id = this._actionsRowManager.getRowID(temprow);
       this._config.actions[row_id] = data;

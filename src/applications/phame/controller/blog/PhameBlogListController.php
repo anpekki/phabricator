@@ -1,34 +1,26 @@
 <?php
 
-final class PhameBlogListController extends PhameController {
+final class PhameBlogListController extends PhameBlogController {
 
   public function shouldAllowPublic() {
     return true;
   }
 
   public function handleRequest(AphrontRequest $request) {
-    $query_key = $request->getURIData('queryKey');
-    $controller = id(new PhabricatorApplicationSearchController())
-      ->setQueryKey($query_key)
-      ->setSearchEngine(new PhameBlogSearchEngine())
-      ->setNavigation($this->buildSideNavView());
-
-    return $this->delegateToController($controller);
+    return id(new PhameBlogSearchEngine())
+      ->setController($this)
+      ->buildResponse();
   }
 
-  public function buildSideNavView() {
-    $viewer = $this->getRequest()->getUser();
 
-    $nav = new AphrontSideNavFilterView();
-    $nav->setBaseURI(new PhutilURI($this->getApplicationURI()));
+  protected function buildApplicationCrumbs() {
+    $crumbs = parent::buildApplicationCrumbs();
 
-    id(new PhameBlogSearchEngine())
-      ->setViewer($viewer)
-      ->addNavigationItems($nav->getMenu());
+    id(new PhameBlogEditEngine())
+      ->setViewer($this->getViewer())
+      ->addActionToCrumbs($crumbs);
 
-    $nav->selectFilter(null);
-
-    return $nav;
+    return $crumbs;
   }
 
 }

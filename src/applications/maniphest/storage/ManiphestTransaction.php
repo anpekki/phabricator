@@ -10,10 +10,12 @@ final class ManiphestTransaction
   const TYPE_PRIORITY = 'priority';
   const TYPE_EDGE = 'edge';
   const TYPE_SUBPRIORITY = 'subpriority';
-  const TYPE_PROJECT_COLUMN = 'projectcolumn';
   const TYPE_MERGED_INTO = 'mergedinto';
   const TYPE_MERGED_FROM = 'mergedfrom';
   const TYPE_UNBLOCK = 'unblock';
+  const TYPE_PARENT = 'parent';
+  const TYPE_COVER_IMAGE = 'cover-image';
+  const TYPE_POINTS = 'points';
 
   // NOTE: this type is deprecated. Keep it around for legacy installs
   // so any transactions render correctly.
@@ -44,7 +46,6 @@ final class ManiphestTransaction
 
   public function shouldGenerateOldValue() {
     switch ($this->getTransactionType()) {
-      case self::TYPE_PROJECT_COLUMN:
       case self::TYPE_EDGE:
       case self::TYPE_UNBLOCK:
         return false;
@@ -80,10 +81,6 @@ final class ManiphestTransaction
         if ($old) {
           $phids[] = $old;
         }
-        break;
-      case self::TYPE_PROJECT_COLUMN:
-        $phids[] = $new['projectPHID'];
-        $phids[] = head($new['columnPHIDs']);
         break;
       case self::TYPE_MERGED_INTO:
         $phids[] = $new;
@@ -147,20 +144,44 @@ final class ManiphestTransaction
         }
         break;
       case self::TYPE_SUBPRIORITY:
+      case self::TYPE_PARENT:
         return true;
-      case self::TYPE_PROJECT_COLUMN:
-        $old_cols = idx($this->getOldValue(), 'columnPHIDs');
-        $new_cols = idx($this->getNewValue(), 'columnPHIDs');
-
-        $old_cols = array_values($old_cols);
-        $new_cols = array_values($new_cols);
-        sort($old_cols);
-        sort($new_cols);
-
-        return ($old_cols === $new_cols);
+      case self::TYPE_COVER_IMAGE:
+        // At least for now, don't show these.
+        return true;
+      case self::TYPE_POINTS:
+        if (!ManiphestTaskPoints::getIsEnabled()) {
+          return true;
+        }
     }
 
     return parent::shouldHide();
+  }
+
+  public function shouldHideForMail(array $xactions) {
+    switch ($this->getTransactionType()) {
+      case self::TYPE_POINTS:
+        return true;
+    }
+
+    return parent::shouldHideForMail($xactions);
+  }
+
+  public function shouldHideForFeed() {
+    switch ($this->getTransactionType()) {
+      case self::TYPE_UNBLOCK:
+        // Hide "alice created X, a task blocking Y." from feed because it
+        // will almost always appear adjacent to "alice created Y".
+        $is_new = $this->getMetadataValue('blocker.new');
+        if ($is_new) {
+          return true;
+        }
+        break;
+      case self::TYPE_POINTS:
+        return true;
+    }
+
+    return parent::shouldHideForFeed();
   }
 
   public function getActionStrength() {
@@ -262,14 +283,14 @@ final class ManiphestTransaction
         if ($this->getAuthorPHID() == $new) {
           return pht('Claimed');
         } else if (!$new) {
-          return pht('Up For Grabs');
+          return pht('Unassigned');
         } else if (!$old) {
           return pht('Assigned');
         } else {
           return pht('Reassigned');
         }
 
-      case self::TYPE_PROJECT_COLUMN:
+      case PhabricatorTransactions::TYPE_COLUMNS:
         return pht('Changed Project Column');
 
       case self::TYPE_PRIORITY:
@@ -339,7 +360,7 @@ final class ManiphestTransaction
       case self::TYPE_DESCRIPTION:
         return 'fa-pencil';
 
-      case self::TYPE_PROJECT_COLUMN:
+      case PhabricatorTransactions::TYPE_COLUMNS:
         return 'fa-columns';
 
       case self::TYPE_MERGED_INTO:
@@ -377,6 +398,11 @@ final class ManiphestTransaction
     $new = $this->getNewValue();
 
     switch ($this->getTransactionType()) {
+      case PhabricatorTransactions::TYPE_CREATE:
+        return pht(
+          '%s created this task.',
+          $this->renderHandleLink($author_phid));
+
       case self::TYPE_TITLE:
         if ($old === null) {
           return pht(
@@ -470,7 +496,12 @@ final class ManiphestTransaction
         $old_name = ManiphestTaskStatus::getTaskStatusName($old_status);
         $new_name = ManiphestTaskStatus::getTaskStatusName($new_status);
 
-        if ($old_closed && !$new_closed) {
+        if ($this->getMetadataValue('blocker.new')) {
+          return pht(
+            '%s created blocking task %s.',
+            $this->renderHandleLink($author_phid),
+            $this->renderHandleLink($blocker_phid));
+        } else if ($old_closed && !$new_closed) {
           return pht(
             '%s reopened blocking task %s as "%s".',
             $this->renderHandleLink($author_phid),
@@ -498,8 +529,9 @@ final class ManiphestTransaction
             $this->renderHandleLink($author_phid));
         } else if (!$new) {
           return pht(
-            '%s placed this task up for grabs.',
-            $this->renderHandleLink($author_phid));
+            '%s removed %s as the assignee of this task.',
+            $this->renderHandleLink($author_phid),
+            $this->renderHandleLink($old));
         } else if (!$old) {
           return pht(
             '%s assigned this task to %s.',
@@ -546,35 +578,25 @@ final class ManiphestTransaction
         $removed = array_diff($old, $new);
         if ($added && !$removed) {
           return pht(
-            '%s attached %d file(s): %s.',
+            '%s attached %s file(s): %s.',
             $this->renderHandleLink($author_phid),
-            count($added),
+            phutil_count($added),
             $this->renderHandleList($added));
         } else if ($removed && !$added) {
           return pht(
-            '%s detached %d file(s): %s.',
+            '%s detached %s file(s): %s.',
             $this->renderHandleLink($author_phid),
-            count($removed),
+            phutil_count($removed),
             $this->renderHandleList($removed));
         } else {
           return pht(
-            '%s changed file(s), attached %d: %s; detached %d: %s.',
+            '%s changed file(s), attached %s: %s; detached %s: %s.',
             $this->renderHandleLink($author_phid),
-            count($added),
+            phutil_count($added),
             $this->renderHandleList($added),
-            count($removed),
+            phutil_count($removed),
             $this->renderHandleList($removed));
         }
-
-      case self::TYPE_PROJECT_COLUMN:
-        $project_phid = $new['projectPHID'];
-        $column_phid = head($new['columnPHIDs']);
-        return pht(
-          '%s moved this task to %s on the %s workboard.',
-          $this->renderHandleLink($author_phid),
-          $this->renderHandleLink($column_phid),
-          $this->renderHandleLink($project_phid));
-        break;
 
       case self::TYPE_MERGED_INTO:
         return pht(
@@ -585,12 +607,29 @@ final class ManiphestTransaction
 
       case self::TYPE_MERGED_FROM:
         return pht(
-          '%s merged %d task(s): %s.',
+          '%s merged %s task(s): %s.',
           $this->renderHandleLink($author_phid),
-          count($new),
+          phutil_count($new),
           $this->renderHandleList($new));
         break;
 
+      case self::TYPE_POINTS:
+        if ($old === null) {
+          return pht(
+            '%s set the point value for this task to %s.',
+            $this->renderHandleLink($author_phid),
+            $new);
+        } else if ($new === null) {
+          return pht(
+            '%s removed the point value for this task.',
+            $this->renderHandleLink($author_phid));
+        } else {
+          return pht(
+            '%s changed the point value for this task from %s to %s.',
+            $this->renderHandleLink($author_phid),
+            $old,
+            $new);
+        }
 
     }
 
@@ -820,16 +859,6 @@ final class ManiphestTransaction
             $this->renderHandleList($removed));
         }
 
-      case self::TYPE_PROJECT_COLUMN:
-        $project_phid = $new['projectPHID'];
-        $column_phid = head($new['columnPHIDs']);
-        return pht(
-          '%s moved %s to %s on the %s workboard.',
-          $this->renderHandleLink($author_phid),
-          $this->renderHandleLink($object_phid),
-          $this->renderHandleLink($column_phid),
-          $this->renderHandleLink($project_phid));
-
       case self::TYPE_MERGED_INTO:
         return pht(
           '%s merged task %s into %s.',
@@ -839,9 +868,9 @@ final class ManiphestTransaction
 
       case self::TYPE_MERGED_FROM:
         return pht(
-          '%s merged %d task(s) %s into %s.',
+          '%s merged %s task(s) %s into %s.',
           $this->renderHandleLink($author_phid),
-          count($new),
+          phutil_count($new),
           $this->renderHandleList($new),
           $this->renderHandleLink($object_phid));
 
@@ -894,7 +923,7 @@ final class ManiphestTransaction
       case self::TYPE_UNBLOCK:
         $tags[] = self::MAILTAG_UNBLOCK;
         break;
-      case self::TYPE_PROJECT_COLUMN:
+      case PhabricatorTransactions::TYPE_COLUMNS:
         $tags[] = self::MAILTAG_COLUMN;
         break;
       case PhabricatorTransactions::TYPE_COMMENT:

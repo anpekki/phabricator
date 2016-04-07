@@ -49,7 +49,7 @@ final class PhabricatorDashboardEditController
 
     if ($is_new) {
       $title = pht('Create Dashboard');
-      $header = pht('Create Dashboard');
+      $header_icon = 'fa-plus-square';
       $button = pht('Create Dashboard');
       $cancel_uri = $this->getApplicationURI();
 
@@ -58,16 +58,15 @@ final class PhabricatorDashboardEditController
       $id = $dashboard->getID();
       $cancel_uri = $this->getApplicationURI('manage/'.$id.'/');
 
-      $title = pht('Edit Dashboard %d', $dashboard->getID());
-      $header = pht('Edit Dashboard "%s"', $dashboard->getName());
+      $title = pht('Edit Dashboard: %s', $dashboard->getName());
+      $header_icon = 'fa-pencil';
       $button = pht('Save Changes');
 
-      $crumbs->addTextCrumb(pht('Dashboard %d', $id), $cancel_uri);
+      $crumbs->addTextCrumb($dashboard->getName(), $cancel_uri);
       $crumbs->addTextCrumb(pht('Edit'));
     }
 
     $v_name = $dashboard->getName();
-    $v_stat = $dashboard->getStatus();
     $v_layout_mode = $dashboard->getLayoutConfigObject()->getLayoutMode();
     $e_name = true;
 
@@ -78,13 +77,11 @@ final class PhabricatorDashboardEditController
       $v_view_policy = $request->getStr('viewPolicy');
       $v_edit_policy = $request->getStr('editPolicy');
       $v_projects = $request->getArr('projects');
-      $v_stat = $request->getStr('status');
 
       $xactions = array();
 
       $type_name = PhabricatorDashboardTransaction::TYPE_NAME;
       $type_layout_mode = PhabricatorDashboardTransaction::TYPE_LAYOUT_MODE;
-      $type_stat = PhabricatorDashboardTransaction::TYPE_STATUS;
       $type_view_policy = PhabricatorTransactions::TYPE_VIEW_POLICY;
       $type_edit_policy = PhabricatorTransactions::TYPE_EDIT_POLICY;
 
@@ -100,9 +97,6 @@ final class PhabricatorDashboardEditController
       $xactions[] = id(new PhabricatorDashboardTransaction())
         ->setTransactionType($type_edit_policy)
         ->setNewValue($v_edit_policy);
-      $xactions[] = id(new PhabricatorDashboardTransaction())
-        ->setTransactionType($type_stat)
-        ->setNewValue($v_stat);
 
       $proj_edge_type = PhabricatorProjectObjectHasProjectEdgeType::EDGECONST;
       $xactions[] = id(new PhabricatorDashboardTransaction())
@@ -147,6 +141,12 @@ final class PhabricatorDashboardEditController
           ->setValue($v_name)
           ->setError($e_name))
       ->appendChild(
+        id(new AphrontFormSelectControl())
+          ->setLabel(pht('Layout Mode'))
+          ->setName('layout_mode')
+          ->setValue($v_layout_mode)
+          ->setOptions($layout_mode_options))
+      ->appendChild(
         id(new AphrontFormPolicyControl())
           ->setName('viewPolicy')
           ->setPolicyObject($dashboard)
@@ -157,19 +157,7 @@ final class PhabricatorDashboardEditController
           ->setName('editPolicy')
           ->setPolicyObject($dashboard)
           ->setCapability(PhabricatorPolicyCapability::CAN_EDIT)
-          ->setPolicies($policies))
-      ->appendChild(
-        id(new AphrontFormSelectControl())
-          ->setLabel(pht('Layout Mode'))
-          ->setName('layout_mode')
-          ->setValue($v_layout_mode)
-          ->setOptions($layout_mode_options))
-      ->appendChild(
-        id(new AphrontFormSelectControl())
-          ->setLabel(pht('Status'))
-          ->setName('status')
-          ->setValue($v_stat)
-          ->setOptions($dashboard->getStatusNameMap()));
+          ->setPolicies($policies));
 
     $form->appendControl(
       id(new AphrontFormTokenizerControl())
@@ -184,18 +172,25 @@ final class PhabricatorDashboardEditController
           ->addCancelButton($cancel_uri));
 
     $box = id(new PHUIObjectBoxView())
-      ->setHeaderText($header)
+      ->setHeaderText(pht('Dashboard'))
       ->setForm($form)
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->setValidationException($validation_exception);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $box,
-      ),
-      array(
-        'title' => $title,
-      ));
+    $crumbs->setBorder(true);
+
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title)
+      ->setHeaderIcon($header_icon);
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter($box);
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
   private function processTemplateRequest(AphrontRequest $request) {

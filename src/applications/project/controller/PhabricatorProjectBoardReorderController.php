@@ -23,13 +23,13 @@ final class PhabricatorProjectBoardReorderController
     $this->setProject($project);
     $project_id = $project->getID();
 
-    $board_uri = $this->getApplicationURI("board/{$project_id}/");
+    $manage_uri = $this->getApplicationURI("board/{$project_id}/manage/");
     $reorder_uri = $this->getApplicationURI("board/{$project_id}/reorder/");
 
     if ($request->isFormPost()) {
       // User clicked "Done", make sure the page reloads to show the new
       // column order.
-      return id(new AphrontRedirectResponse())->setURI($board_uri);
+      return id(new AphrontRedirectResponse())->setURI($manage_uri);
     }
 
     $columns = id(new PhabricatorProjectColumnQuery())
@@ -97,9 +97,20 @@ final class PhabricatorProjectBoardReorderController
       ->setFlush(true);
 
     foreach ($columns as $column) {
+      // Don't allow milestone columns to be reordered.
+      $proxy = $column->getProxy();
+      if ($proxy && $proxy->isMilestone()) {
+        continue;
+      }
+
+      // At least for now, don't show subproject column.
+      if ($proxy) {
+        continue;
+      }
+
       $item = id(new PHUIObjectItemView())
         ->setHeader($column->getDisplayName())
-        ->addIcon('none', $column->getDisplayType());
+        ->addIcon($column->getHeaderIcon(), $column->getDisplayType());
 
       if ($column->isHidden()) {
         $item->setDisabled(true);

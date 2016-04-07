@@ -1,7 +1,7 @@
 <?php
 
 final class DrydockRepositoryOperationViewController
-  extends DrydockController {
+  extends DrydockRepositoryOperationController {
 
   public function shouldAllowPublic() {
     return true;
@@ -25,48 +25,52 @@ final class DrydockRepositoryOperationViewController
     $header = id(new PHUIHeaderView())
       ->setHeader($title)
       ->setUser($viewer)
-      ->setPolicyObject($operation);
+      ->setPolicyObject($operation)
+      ->setHeaderIcon('fa-fighter-jet');
 
     $state = $operation->getOperationState();
     $icon = DrydockRepositoryOperation::getOperationStateIcon($state);
     $name = DrydockRepositoryOperation::getOperationStateName($state);
     $header->setStatus($icon, null, $name);
 
-    $actions = $this->buildActionListView($operation);
+    $curtain = $this->buildCurtain($operation);
     $properties = $this->buildPropertyListView($operation);
-    $properties->setActionList($actions);
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb(
       pht('Operations'),
       $this->getApplicationURI('operation/'));
     $crumbs->addTextCrumb($title);
+    $crumbs->setBorder(true);
 
-    $object_box = id(new PHUIObjectBoxView())
+    $status_view = id(new DrydockRepositoryOperationStatusView())
+      ->setUser($viewer)
+      ->setOperation($operation);
+
+    $view = id(new PHUITwoColumnView())
       ->setHeader($header)
-      ->addPropertyList($properties);
-
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $object_box,
-      ),
-      array(
-        'title' => $title,
+      ->setCurtain($curtain)
+      ->addPropertySection(pht('Properties'), $properties)
+      ->setMainColumn(array(
+        $status_view,
       ));
 
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild(
+        array(
+          $view,
+      ));
   }
 
-  private function buildActionListView(DrydockRepositoryOperation $operation) {
+  private function buildCurtain(DrydockRepositoryOperation $operation) {
     $viewer = $this->getViewer();
     $id = $operation->getID();
 
-    $view = id(new PhabricatorActionListView())
-      ->setUser($viewer)
-      ->setObjectURI($this->getRequest()->getRequestURI())
-      ->setObject($operation);
+    $curtain = $this->newCurtainView($operation);
 
-    return $view;
+    return $curtain;
   }
 
   private function buildPropertyListView(
@@ -82,6 +86,15 @@ final class DrydockRepositoryOperationViewController
     $view->addProperty(
       pht('Object'),
       $viewer->renderHandle($operation->getObjectPHID()));
+
+    $lease_phid = $operation->getWorkingCopyLeasePHID();
+    if ($lease_phid) {
+      $lease_display = $viewer->renderHandle($lease_phid);
+    } else {
+      $lease_display = phutil_tag('em', array(), pht('None'));
+    }
+
+    $view->addProperty(pht('Working Copy'), $lease_display);
 
     return $view;
   }

@@ -43,12 +43,16 @@
 }
 
 .device-desktop .phui-property-list-key {
-  width: 18%;
+  width: 12%;
   margin-left: 1%;
   text-align: right;
   float: left;
   clear: left;
   margin-bottom: 4px;
+}
+
+.device-desktop .phui-property-list-has-actions .phui-property-list-key {
+  width: 18%;
 }
 
 .phui-property-list-properties-wrap.phui-property-list-stacked {
@@ -71,10 +75,14 @@
 }
 
 .device-desktop .phui-property-list-value {
-  width: 78%;
+  width: 84%;
   margin-left: 1%;
   float: left;
   margin-bottom: 4px;
+}
+
+.device-desktop .phui-property-list-has-actions .phui-property-list-value {
+  width: 78%;
 }
 
 .device .phui-property-list-value,
@@ -117,7 +125,7 @@
 }
 
 .phui-property-list-text-content {
-  padding: 12px 4px;
+  padding: 16px 4px;
   overflow: hidden;
 }
 
@@ -158,7 +166,7 @@
   margin: 2px 0;
 }
 
-.phui-property-list-properties-wrap {
+.phui-property-list-has-actions .phui-property-list-properties-wrap {
   float: left;
   width: 78%;
 }
@@ -191,7 +199,6 @@
 .phui-property-list-image-content img {
   margin: 20px auto;
   background: url('/rsrc/image/checker_light.png');
-  border: 1px solid {$lightblueborder};
 }
 
 .device-desktop .phui-property-list-image-content img:hover {

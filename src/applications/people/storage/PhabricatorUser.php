@@ -15,7 +15,8 @@ final class PhabricatorUser
     PhabricatorDestructibleInterface,
     PhabricatorSSHPublicKeyInterface,
     PhabricatorFlaggableInterface,
-    PhabricatorApplicationTransactionInterface {
+    PhabricatorApplicationTransactionInterface,
+    PhabricatorFulltextInterface {
 
   const SESSION_TABLE = 'phabricator_session';
   const NAMETOKEN_TABLE = 'user_nametoken';
@@ -273,8 +274,7 @@ final class PhabricatorUser
 
     $this->updateNameTokens();
 
-    id(new PhabricatorSearchIndexer())
-      ->queueDocumentForIndexing($this->getPHID());
+    PhabricatorSearchWorker::queueDocumentForIndexing($this->getPHID());
 
     return $result;
   }
@@ -451,8 +451,7 @@ final class PhabricatorUser
       $this->getPHID());
 
     if (!$this->profile) {
-      $profile_dao->setUserPHID($this->getPHID());
-      $this->profile = $profile_dao;
+      $this->profile = PhabricatorUserProfile::initializeNewProfile($this);
     }
 
     return $this->profile;
@@ -504,7 +503,11 @@ final class PhabricatorUser
     return $preferences;
   }
 
-  public function loadEditorLink($path, $line, $callsign) {
+  public function loadEditorLink(
+    $path,
+    $line,
+    PhabricatorRepository $repository = null) {
+
     $editor = $this->loadPreferences()->getPreference(
       PhabricatorUserPreferences::PREFERENCE_EDITOR);
 
@@ -522,6 +525,12 @@ final class PhabricatorUser
 
     if (!strlen($editor)) {
       return null;
+    }
+
+    if ($repository) {
+      $callsign = $repository->getCallsign();
+    } else {
+      $callsign = null;
     }
 
     $uri = strtr($editor, array(
@@ -731,6 +740,38 @@ final class PhabricatorUser
 
   public function getTimeZone() {
     return new DateTimeZone($this->getTimezoneIdentifier());
+  }
+
+  public function formatShortDateTime($when, $now = null) {
+    if ($now === null) {
+      $now = PhabricatorTime::getNow();
+    }
+
+    try {
+      $when = new DateTime('@'.$when);
+      $now = new DateTime('@'.$now);
+    } catch (Exception $ex) {
+      return null;
+    }
+
+    $zone = $this->getTimeZone();
+
+    $when->setTimeZone($zone);
+    $now->setTimeZone($zone);
+
+    if ($when->format('Y') !== $now->format('Y')) {
+      // Different year, so show "Feb 31 2075".
+      $format = 'M j Y';
+    } else if ($when->format('Ymd') !== $now->format('Ymd')) {
+      // Same year but different month and day, so show "Feb 31".
+      $format = 'M j';
+    } else {
+      // Same year, month and day so show a time of day.
+      $pref_time = PhabricatorUserPreferences::PREFERENCE_TIME_FORMAT;
+      $format = $this->getPreference($pref_time);
+    }
+
+    return $when->format($format);
   }
 
   public function getPreference($key) {
@@ -1307,6 +1348,14 @@ final class PhabricatorUser
     PhabricatorApplicationTransactionView $timeline,
     AphrontRequest $request) {
     return $timeline;
+  }
+
+
+/* -(  PhabricatorFulltextInterface  )--------------------------------------- */
+
+
+  public function newFulltextEngine() {
+    return new PhabricatorUserFulltextEngine();
   }
 
 }

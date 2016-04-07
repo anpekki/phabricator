@@ -250,21 +250,15 @@ final class LegalpadDocumentSignController extends LegalpadController {
       ->addActionLink(
         id(new PHUIButtonView())
           ->setTag('a')
-          ->setIcon(
-            id(new PHUIIconView())
-              ->setIconFont('fa-pencil'))
-          ->setText(pht('Manage Document'))
+          ->setIcon('fa-pencil')
+          ->setText(pht('Manage'))
           ->setHref($manage_uri)
           ->setDisabled(!$can_edit)
           ->setWorkflow(!$can_edit));
 
     $preamble_box = null;
     if (strlen($document->getPreamble())) {
-      $preamble_text = PhabricatorMarkupEngine::renderOneObject(
-        id(new PhabricatorMarkupOneOff())->setContent(
-          $document->getPreamble()),
-        'default',
-        $viewer);
+      $preamble_text = new PHUIRemarkupView($viewer, $document->getPreamble());
 
       // NOTE: We're avoiding `setObject()` here so we don't pick up extra UI
       // elements like "Subscribers". This information is available on the
@@ -278,7 +272,7 @@ final class LegalpadDocumentSignController extends LegalpadController {
       $preamble_box->addPropertyList($preamble);
     }
 
-    $content = id(new PHUIDocumentView())
+    $content = id(new PHUIDocumentViewPro())
       ->addClass('legalpad')
       ->setHeader($header)
       ->appendChild(
@@ -288,6 +282,7 @@ final class LegalpadDocumentSignController extends LegalpadController {
           $document_markup,
         ));
 
+    $signature_box = null;
     if (!$has_signed) {
       $error_view = null;
       if ($errors) {
@@ -301,37 +296,37 @@ final class LegalpadDocumentSignController extends LegalpadController {
         $field_errors);
 
       switch ($document->getSignatureType()) {
-        case LegalpadDocument::SIGNATURE_TYPE_NONE:
-          $subheader = null;
+        default:
           break;
         case LegalpadDocument::SIGNATURE_TYPE_INDIVIDUAL:
         case LegalpadDocument::SIGNATURE_TYPE_CORPORATION:
-          $subheader = id(new PHUIHeaderView())
-            ->setHeader(pht('Agree and Sign Document'))
-            ->setBleedHeader(true);
+          $box = id(new PHUIObjectBoxView())
+            ->addClass('document-sign-box')
+            ->setHeaderText(pht('Agree and Sign Document'))
+            ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+            ->setForm($signature_form);
+          if ($error_view) {
+            $box->setInfoView($error_view);
+          }
+          $signature_box = phutil_tag_div(
+            'phui-document-view-pro-box plt', $box);
           break;
       }
 
-      $content->appendChild(
-        array(
-          $subheader,
-          $error_view,
-          $signature_form,
-        ));
+
     }
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->setBorder(true);
     $crumbs->addTextCrumb($document->getMonogram());
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->setPageObjectPHIDs(array($document->getPHID()))
+      ->appendChild(array(
         $content,
-      ),
-      array(
-        'title' => $title,
-        'pageObjects' => array($document->getPHID()),
+        $signature_box,
       ));
   }
 

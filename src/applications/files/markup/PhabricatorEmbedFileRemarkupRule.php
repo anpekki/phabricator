@@ -16,6 +16,10 @@ final class PhabricatorEmbedFileRemarkupRule
     $objects = id(new PhabricatorFileQuery())
       ->setViewer($viewer)
       ->withIDs($ids)
+      ->needTransforms(
+        array(
+          PhabricatorFileThumbnailTransform::TRANSFORM_PREVIEW,
+        ))
       ->execute();
 
     $phids_key = self::KEY_EMBED_FILE_PHIDS;
@@ -79,7 +83,7 @@ final class PhabricatorEmbedFileRemarkupRule
     require_celerity_resource('lightbox-attachment-css');
 
     $attrs = array();
-    $image_class = null;
+    $image_class = 'phabricator-remarkup-embed-image';
 
     $use_size = true;
     if (!$options['size']) {
@@ -109,7 +113,15 @@ final class PhabricatorEmbedFileRemarkupRule
         default:
           $preview_key = PhabricatorFileThumbnailTransform::TRANSFORM_PREVIEW;
           $xform = PhabricatorFileTransform::getTransformByKey($preview_key);
-          $attrs['src'] = $file->getURIForTransform($xform);
+
+          $existing_xform = $file->getTransform($preview_key);
+          if ($existing_xform) {
+            $xform_uri = $existing_xform->getCDNURI();
+          } else {
+            $xform_uri = $file->getURIForTransform($xform);
+          }
+
+          $attrs['src'] = $xform_uri;
 
           $dimensions = $xform->getTransformedDimensions($file);
           if ($dimensions) {
@@ -117,8 +129,6 @@ final class PhabricatorEmbedFileRemarkupRule
             $attrs['width'] = $x;
             $attrs['height'] = $y;
           }
-
-          $image_class = 'phabricator-remarkup-embed-image';
           break;
       }
     }

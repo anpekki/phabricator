@@ -275,6 +275,7 @@ final class DifferentialChangesetViewController extends DifferentialController {
       ->setRenderURI('/differential/changeset/')
       ->setDiff($diff)
       ->setTitle(pht('Standalone View'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->setParser($parser);
 
     if ($revision_id) {
@@ -296,16 +297,20 @@ final class DifferentialChangesetViewController extends DifferentialController {
     }
 
     $crumbs->addTextCrumb($changeset->getDisplayFilename());
+    $crumbs->setBorder(true);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
-        $detail,
-      ),
-      array(
-        'title' => pht('Changeset View'),
-        'device' => false,
-      ));
+    $header = id(new PHUIHeaderView())
+      ->setHeader(pht('Changeset View'))
+      ->setHeaderIcon('fa-gear');
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter($detail);
+
+    return $this->newPage()
+      ->setTitle(pht('Changeset View'))
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
   }
 
   private function buildRawFileResponse(
@@ -387,7 +392,6 @@ final class DifferentialChangesetViewController extends DifferentialController {
     $inlines = array();
     foreach ($messages as $message) {
       $description = $message->getProperty('description');
-      $description = '%%%'.$description.'%%%';
 
       $inlines[] = id(clone $template)
         ->setSyntheticAuthor(pht('Lint: %s', $message->getName()))
@@ -401,21 +405,32 @@ final class DifferentialChangesetViewController extends DifferentialController {
   private function loadCoverage(DifferentialChangeset $changeset) {
     $target_phids = $changeset->getDiff()->getBuildTargetPHIDs();
     if (!$target_phids) {
-      return array();
+      return null;
     }
 
     $unit = id(new HarbormasterBuildUnitMessage())->loadAllWhere(
       'buildTargetPHID IN (%Ls)',
       $target_phids);
 
+    if (!$unit) {
+      return null;
+    }
+
     $coverage = array();
     foreach ($unit as $message) {
-      $test_coverage = $message->getProperty('coverage', array());
+      $test_coverage = $message->getProperty('coverage');
+      if ($test_coverage === null) {
+        continue;
+      }
       $coverage_data = idx($test_coverage, $changeset->getFileName());
       if (!strlen($coverage_data)) {
         continue;
       }
       $coverage[] = $coverage_data;
+    }
+
+    if (!$coverage) {
+      return null;
     }
 
     return ArcanistUnitTestResult::mergeCoverage($coverage);
