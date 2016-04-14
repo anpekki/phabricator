@@ -272,6 +272,15 @@ final class PhabricatorStandardPageView extends PhabricatorBarePageView
       'high-security-warning',
       $this->getHighSecurityWarningConfig());
 
+    if (PhabricatorEnv::isReadOnly()) {
+      Javelin::initBehavior(
+        'read-only-warning',
+        array(
+          'message' => PhabricatorEnv::getReadOnlyMessage(),
+          'uri' => PhabricatorEnv::getReadOnlyURI(),
+        ));
+    }
+
     if ($console) {
       require_celerity_resource('aphront-dark-console-css');
 

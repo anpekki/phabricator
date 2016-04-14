@@ -56,6 +56,13 @@ final class PhabricatorEnv extends Phobject {
   private static $requestBaseURI;
   private static $cache;
   private static $localeCode;
+  private static $readOnly;
+  private static $readOnlyReason;
+
+  const READONLY_CONFIG = 'config';
+  const READONLY_UNREACHABLE = 'unreachable';
+  const READONLY_SEVERED = 'severed';
+  const READONLY_MASTERLESS = 'masterless';
 
   /**
    * @phutil-external-symbol class PhabricatorStartup
@@ -207,6 +214,16 @@ final class PhabricatorEnv extends Phobject {
 
     foreach ($site_sources as $site_source) {
       $stack->pushSource($site_source);
+    }
+
+    $master = PhabricatorDatabaseRef::getMasterDatabaseRef();
+    if (!$master) {
+      self::setReadOnly(true, self::READONLY_MASTERLESS);
+    } else if ($master->isSevered()) {
+      $master->checkHealth();
+      if ($master->isSevered()) {
+        self::setReadOnly(true, self::READONLY_SEVERED);
+      }
     }
 
     try {
@@ -438,6 +455,55 @@ final class PhabricatorEnv extends Phobject {
   public static function setRequestBaseURI($uri) {
     self::$requestBaseURI = $uri;
   }
+
+  public static function isReadOnly() {
+    if (self::$readOnly !== null) {
+      return self::$readOnly;
+    }
+    return self::getEnvConfig('cluster.read-only');
+  }
+
+  public static function setReadOnly($read_only, $reason) {
+    self::$readOnly = $read_only;
+    self::$readOnlyReason = $reason;
+  }
+
+  public static function getReadOnlyMessage() {
+    $reason = self::getReadOnlyReason();
+    switch ($reason) {
+      case self::READONLY_MASTERLESS:
+        return pht(
+          'Phabricator is in read-only mode (no writable database '.
+          'is configured).');
+      case self::READONLY_UNREACHABLE:
+        return pht(
+          'Phabricator is in read-only mode (unreachable master).');
+      case self::READONLY_SEVERED:
+        return pht(
+          'Phabricator is in read-only mode (major interruption).');
+    }
+
+    return pht('Phabricator is in read-only mode.');
+  }
+
+  public static function getReadOnlyURI() {
+    return urisprintf(
+      '/readonly/%s/',
+      self::getReadOnlyReason());
+  }
+
+  public static function getReadOnlyReason() {
+    if (!self::isReadOnly()) {
+      return null;
+    }
+
+    if (self::$readOnlyReason !== null) {
+      return self::$readOnlyReason;
+    }
+
+    return self::READONLY_CONFIG;
+  }
+
 
 /* -(  Unit Test Support  )-------------------------------------------------- */
 
