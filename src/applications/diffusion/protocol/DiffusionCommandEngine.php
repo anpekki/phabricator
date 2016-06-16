@@ -9,6 +9,7 @@ abstract class DiffusionCommandEngine extends Phobject {
   private $passthru;
   private $connectAsDevice;
   private $sudoAsDaemon;
+  private $uri;
 
   public static function newCommandEngine(PhabricatorRepository $repository) {
     $engines = self::newCommandEngines();
@@ -48,6 +49,16 @@ abstract class DiffusionCommandEngine extends Phobject {
     return $this->repository;
   }
 
+  public function setURI(PhutilURI $uri) {
+    $this->uri = $uri;
+    $this->setProtocol($uri->getProtocol());
+    return $this;
+  }
+
+  public function getURI() {
+    return $this->uri;
+  }
+
   public function setProtocol($protocol) {
     $this->protocol = $protocol;
     return $this;
@@ -55,6 +66,10 @@ abstract class DiffusionCommandEngine extends Phobject {
 
   public function getProtocol() {
     return $this->protocol;
+  }
+
+  public function getDisplayProtocol() {
+    return $this->getProtocol().'://';
   }
 
   public function setCredentialPHID($credential_phid) {
@@ -197,32 +212,80 @@ abstract class DiffusionCommandEngine extends Phobject {
     return $env;
   }
 
-  protected function isSSHProtocol() {
+  public function isSSHProtocol() {
     return ($this->getProtocol() == 'ssh');
   }
 
-  protected function isSVNProtocol() {
+  public function isSVNProtocol() {
     return ($this->getProtocol() == 'svn');
   }
 
-  protected function isSVNSSHProtocol() {
+  public function isSVNSSHProtocol() {
     return ($this->getProtocol() == 'svn+ssh');
   }
 
-  protected function isHTTPProtocol() {
+  public function isHTTPProtocol() {
     return ($this->getProtocol() == 'http');
   }
 
-  protected function isHTTPSProtocol() {
+  public function isHTTPSProtocol() {
     return ($this->getProtocol() == 'https');
   }
 
-  protected function isAnyHTTPProtocol() {
+  public function isAnyHTTPProtocol() {
     return ($this->isHTTPProtocol() || $this->isHTTPSProtocol());
   }
 
-  protected function isAnySSHProtocol() {
+  public function isAnySSHProtocol() {
     return ($this->isSSHProtocol() || $this->isSVNSSHProtocol());
+  }
+
+  public function isCredentialSupported() {
+    return ($this->getPassphraseProvidesCredentialType() !== null);
+  }
+
+  public function isCredentialOptional() {
+    if ($this->isAnySSHProtocol()) {
+      return false;
+    }
+
+    return true;
+  }
+
+  public function getPassphraseCredentialLabel() {
+    if ($this->isAnySSHProtocol()) {
+      return pht('SSH Key');
+    }
+
+    if ($this->isAnyHTTPProtocol() || $this->isSVNProtocol()) {
+      return pht('Password');
+    }
+
+    return null;
+  }
+
+  public function getPassphraseDefaultCredentialType() {
+    if ($this->isAnySSHProtocol()) {
+      return PassphraseSSHPrivateKeyTextCredentialType::CREDENTIAL_TYPE;
+    }
+
+    if ($this->isAnyHTTPProtocol() || $this->isSVNProtocol()) {
+      return PassphrasePasswordCredentialType::CREDENTIAL_TYPE;
+    }
+
+    return null;
+  }
+
+  public function getPassphraseProvidesCredentialType() {
+    if ($this->isAnySSHProtocol()) {
+      return PassphraseSSHPrivateKeyCredentialType::PROVIDES_TYPE;
+    }
+
+    if ($this->isAnyHTTPProtocol() || $this->isSVNProtocol()) {
+      return PassphrasePasswordCredentialType::PROVIDES_TYPE;
+    }
+
+    return null;
   }
 
   protected function getSSHWrapper() {

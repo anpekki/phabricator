@@ -229,25 +229,6 @@ final class PhabricatorDifferentialConfigOptions
             "\n\n".
             'This sort of workflow is very unusual. Very few installs should '.
             'need to change this option.')),
-      $this->newOption('differential.days-fresh', 'int', 1)
-        ->setSummary(
-          pht(
-            "For how many business days should a revision be considered ".
-            "'fresh'?"))
-        ->setDescription(
-          pht(
-            'Revisions newer than this number of days are marked as fresh in '.
-            'Action Required and Revisions Waiting on You views. Only work '.
-            'days (not weekends and holidays) are included. Set to 0 to '.
-            'disable this feature.')),
-      $this->newOption('differential.days-stale', 'int', 3)
-        ->setSummary(
-          pht("After this many days, a revision will be considered 'stale'."))
-        ->setDescription(
-          pht(
-            "Similar to `%s` but marks stale revisions. ".
-            "If the revision is even older than it is when marked as 'old'.",
-            'differential.days-fresh')),
       $this->newOption(
         'metamta.differential.subject-prefix',
         'string',
@@ -280,28 +261,14 @@ final class PhabricatorDifferentialConfigOptions
             "that many lines. For instance, a value of 100 means 'inline ".
             "patches if they are no longer than 100 lines'. By default, ".
             "patches are not inlined.")),
-      // TODO: Implement 'enum'? Options are 'unified' or 'git'.
       $this->newOption(
         'metamta.differential.patch-format',
-        'string',
+        'enum',
         'unified')
         ->setDescription(
-          pht("Format for inlined or attached patches: 'git' or 'unified'.")),
-      $this->newOption(
-        'metamta.differential.unified-comment-context',
-        'bool',
-        false)
-        ->setBoolOptions(
-          array(
-            pht('Show context'),
-            pht('Do not show context'),
-          ))
-        ->setSummary(pht('Show diff context around inline comments in email.'))
-        ->setDescription(
-          pht(
-            'Normally, inline comments in emails are shown with a file and '.
-            'line but without any diff context. Enabling this option adds '.
-            'diff context and the comment thread.')),
+          pht('Format for inlined or attached patches.'))
+        ->setEnumOptions(
+          array('unified' => 'unified', 'git' => 'git')),
     );
   }
 

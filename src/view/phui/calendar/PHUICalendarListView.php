@@ -85,7 +85,13 @@ final class PHUICalendarListView extends AphrontTagView {
       }
 
       $tip = $this->getEventTooltip($event);
-      $tip_align = ($this->getView() == 'day') ? 'E' : 'N';
+      if ($this->getView() == 'day') {
+        $tip_align = 'E';
+      } else if ($this->getView() == 'month') {
+        $tip_align = 'N';
+      } else {
+        $tip_align = 'W';
+      }
       $content = javelin_tag(
         'a',
         array(
@@ -141,16 +147,18 @@ final class PHUICalendarListView extends AphrontTagView {
   }
 
   private function getEventTooltip(AphrontCalendarEventView $event) {
-    $time_pref = $this->getUser()
-      ->getPreference(PhabricatorUserPreferences::PREFERENCE_TIME_FORMAT);
+    $viewer = $this->getViewer();
+    $time_key = PhabricatorTimeFormatSetting::SETTINGKEY;
+    $time_pref = $viewer->getUserSetting($time_key);
 
     Javelin::initBehavior('phabricator-tooltips');
 
     $start = id(AphrontFormDateControlValue::newFromEpoch(
-      $this->getUser(),
+      $viewer,
       $event->getEpochStart()));
+
     $end = id(AphrontFormDateControlValue::newFromEpoch(
-      $this->getUser(),
+      $viewer,
       $event->getEpochEnd()));
 
     $start_date = $start->getDateTime()->format('m d Y');

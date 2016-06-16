@@ -179,6 +179,50 @@ abstract class PhabricatorApplicationTransaction
     return $this->assertAttached($this->object);
   }
 
+  public function getRemarkupChanges() {
+    $changes = $this->newRemarkupChanges();
+    assert_instances_of($changes, 'PhabricatorTransactionRemarkupChange');
+
+    // Convert older-style remarkup blocks into newer-style remarkup changes.
+    // This builds changes that do not have the correct "old value", so rules
+    // that operate differently against edits (like @user mentions) won't work
+    // properly.
+    foreach ($this->getRemarkupBlocks() as $block) {
+      $changes[] = $this->newRemarkupChange()
+        ->setOldValue(null)
+        ->setNewValue($block);
+    }
+
+    $comment = $this->getComment();
+    if ($comment) {
+      if ($comment->hasOldComment()) {
+        $old_value = $comment->getOldComment()->getContent();
+      } else {
+        $old_value = null;
+      }
+
+      $new_value = $comment->getContent();
+
+      $changes[] = $this->newRemarkupChange()
+        ->setOldValue($old_value)
+        ->setNewValue($new_value);
+    }
+
+    return $changes;
+  }
+
+  protected function newRemarkupChanges() {
+    return array();
+  }
+
+  protected function newRemarkupChange() {
+    return id(new PhabricatorTransactionRemarkupChange())
+      ->setTransaction($this);
+  }
+
+  /**
+   * @deprecated
+   */
   public function getRemarkupBlocks() {
     $blocks = array();
 
@@ -193,10 +237,6 @@ abstract class PhabricatorApplicationTransaction
           }
         }
         break;
-    }
-
-    if ($this->getComment()) {
-      $blocks[] = $this->getComment()->getContent();
     }
 
     return $blocks;
@@ -240,6 +280,7 @@ abstract class PhabricatorApplicationTransaction
     $new = $this->getNewValue();
 
     $phids[] = array($this->getAuthorPHID());
+    $phids[] = array($this->getObjectPHID());
     switch ($this->getTransactionType()) {
       case PhabricatorTransactions::TYPE_CUSTOMFIELD:
         $field = $this->getTransactionCustomField();
@@ -613,7 +654,14 @@ abstract class PhabricatorApplicationTransaction
           case PhabricatorObjectMentionsObjectEdgeType::EDGECONST:
           case PhabricatorObjectMentionedByObjectEdgeType::EDGECONST:
             return true;
-            break;
+          case PhabricatorProjectObjectHasProjectEdgeType::EDGECONST:
+            // When an object is first created, we hide any corresponding
+            // project transactions in the web UI because you can just look at
+            // the UI element elsewhere on screen to see which projects it
+            // is tagged with. However, in mail there's no other way to get
+            // this information, and it has some amount of value to users, so
+            // we keep the transaction. See T10493.
+            return false;
           default:
             break;
         }
@@ -684,6 +732,33 @@ abstract class PhabricatorApplicationTransaction
 
   public function getTitleForMail() {
     return id(clone $this)->setRenderingTarget('text')->getTitle();
+  }
+
+  public function getTitleForHTMLMail() {
+    $title = $this->getTitleForMail();
+    if ($title === null) {
+      return null;
+    }
+
+    if ($this->hasChangeDetails()) {
+      $details_uri = $this->getChangeDetailsURI();
+      $details_uri = PhabricatorEnv::getProductionURI($details_uri);
+
+      $show_details = phutil_tag(
+        'a',
+        array(
+          'href' => $details_uri,
+        ),
+        pht('(Show Details)'));
+
+      $title = array($title, ' ', $show_details);
+    }
+
+    return $title;
+  }
+
+  public function getChangeDetailsURI() {
+    return '/transactions/detail/'.$this->getPHID().'/';
   }
 
   public function getBodyForMail() {
@@ -1300,6 +1375,18 @@ abstract class PhabricatorApplicationTransaction
     return false;
   }
 
+  public function hasChangeDetailsForMail() {
+    return $this->hasChangeDetails();
+  }
+
+  public function renderChangeDetailsForMail(PhabricatorUser $viewer) {
+    $view = $this->renderChangeDetails($viewer);
+    if ($view instanceof PhabricatorApplicationTransactionTextDiffDetailView) {
+      return $view->renderForMail();
+    }
+    return null;
+  }
+
   public function renderChangeDetails(PhabricatorUser $viewer) {
     switch ($this->getTransactionType()) {
       case PhabricatorTransactions::TYPE_CUSTOMFIELD:
@@ -1320,15 +1407,10 @@ abstract class PhabricatorApplicationTransaction
     PhabricatorUser $viewer,
     $old,
     $new) {
-
-    require_celerity_resource('differential-changeset-view-css');
-
-    $view = id(new PhabricatorApplicationTransactionTextDiffDetailView())
+    return id(new PhabricatorApplicationTransactionTextDiffDetailView())
       ->setUser($viewer)
       ->setOldText($old)
       ->setNewText($new);
-
-    return $view->render();
   }
 
   public function attachTransactionGroup(array $group) {

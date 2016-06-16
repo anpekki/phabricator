@@ -24,11 +24,25 @@ final class DiffusionGitCommandEngine
     // really silly, but seems like the least damaging approach to
     // mitigating the issue.
 
-    $root = dirname(phutil_get_library_root('phabricator'));
-    $env['HOME'] = $root.'/support/empty/';
+    $env['HOME'] = PhabricatorEnv::getEmptyCWD();
 
     if ($this->isAnySSHProtocol()) {
       $env['GIT_SSH'] = $this->getSSHWrapper();
+    }
+
+    if ($this->isAnyHTTPProtocol()) {
+      $uri = $this->getURI();
+      if ($uri) {
+        $proxy = PhutilHTTPEngineExtension::buildHTTPProxyURI($uri);
+        if ($proxy) {
+          if ($this->isHTTPSProtocol()) {
+            $env_key = 'https_proxy';
+          } else {
+            $env_key = 'http_proxy';
+          }
+          $env[$env_key] = (string)$proxy;
+        }
+      }
     }
 
     return $env;

@@ -55,6 +55,7 @@ final class PhabricatorPhameApplication extends PhabricatorApplication {
           'preview/' => 'PhabricatorMarkupPreviewController',
           'framed/(?P<id>\d+)/' => 'PhamePostFramedController',
           'move/(?P<id>\d+)/' => 'PhamePostMoveController',
+          'archive/(?P<id>\d+)/' => 'PhamePostArchiveController',
           'comment/(?P<id>[1-9]\d*)/' => 'PhamePostCommentController',
         ),
         'blog/' => array(
@@ -93,7 +94,9 @@ final class PhabricatorPhameApplication extends PhabricatorApplication {
       '/' => array(
         '' => 'PhameBlogViewController',
         'post/(?P<id>\d+)/(?:(?P<slug>[^/]+)/)?' => 'PhamePostViewController',
+        '.*' => 'PhameBlog404Controller',
       ),
+
     );
   }
 

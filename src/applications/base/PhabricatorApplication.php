@@ -335,17 +335,6 @@ abstract class PhabricatorApplication
   }
 
 
-  /**
-   * Build items for the "quick create" menu.
-   *
-   * @param   PhabricatorUser         The viewing user.
-   * @return  list<PHUIListItemView>  List of menu items.
-   */
-  public function getQuickCreateItems(PhabricatorUser $viewer) {
-    return array();
-  }
-
-
 /* -(  Application Management  )--------------------------------------------- */
 
 
@@ -624,11 +613,11 @@ abstract class PhabricatorApplication
       '(?P<id>[0-9]\d*)/)?'.
       '(?:'.
         '(?:'.
-          '(?P<editAction>parameters|nodefault|nocreate|nomanage|comment)'.
+          '(?P<editAction>parameters|nodefault|nocreate|nomanage|comment)/'.
           '|'.
-          '(?:form/(?P<formKey>[^/]+))'.
+          '(?:form/(?P<formKey>[^/]+)/)?(?:page/(?P<pageKey>[^/]+)/)?'.
         ')'.
-      '/)?';
+      ')?';
   }
 
   protected function getQueryRoutePattern($base = null) {

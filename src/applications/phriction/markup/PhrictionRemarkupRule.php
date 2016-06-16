@@ -16,7 +16,15 @@ final class PhrictionRemarkupRule extends PhutilRemarkupRule {
   }
 
   public function markupDocumentLink(array $matches) {
-    $link = trim($matches[1]);
+    // If the link contains an anchor, separate that off first.
+    $parts = explode('#', trim($matches[1]), 2);
+    if (count($parts) == 2) {
+      $link = $parts[0];
+      $anchor = $parts[1];
+    } else {
+      $link = $parts[0];
+      $anchor = null;
+    }
 
     // Handle relative links.
     if ((substr($link, 0, 2) === './') || (substr($link, 0, 3) === '../')) {
@@ -67,6 +75,7 @@ final class PhrictionRemarkupRule extends PhutilRemarkupRule {
     $metadata[] = array(
       'token' => $token,
       'link' => $link,
+      'anchor' => $anchor,
       'explicitName' => $name,
     );
     $engine->setTextMetadata(self::KEY_RULE_PHRICTION_LINK, $metadata);
@@ -85,6 +94,9 @@ final class PhrictionRemarkupRule extends PhutilRemarkupRule {
     }
 
     $slugs = ipull($metadata, 'link');
+    foreach ($slugs as $key => $slug) {
+      $slugs[$key] = PhabricatorSlug::normalize($slug);
+    }
 
     // We have to make two queries here to distinguish between
     // documents the user can't see, and documents that don't
@@ -115,14 +127,14 @@ final class PhrictionRemarkupRule extends PhutilRemarkupRule {
       if (idx($existant_documents, $slug) === null) {
         // The target document doesn't exist.
         if ($name === null) {
-          $name = explode('/', trim($slug, '/'));
+          $name = explode('/', trim($link, '/'));
           $name = end($name);
         }
         $class = 'phriction-link-missing';
       } else if (idx($visible_documents, $slug) === null) {
         // The document exists, but the user can't see it.
         if ($name === null) {
-          $name = explode('/', trim($slug, '/'));
+          $name = explode('/', trim($link, '/'));
           $name = end($name);
         }
         $class = 'phriction-link-lock';
@@ -137,12 +149,13 @@ final class PhrictionRemarkupRule extends PhutilRemarkupRule {
         }
       }
 
-      $uri      = new PhutilURI($link);
-      $slug     = $uri->getPath();
-      $fragment = $uri->getFragment();
-      $slug     = PhabricatorSlug::normalize($slug);
-      $slug     = PhrictionDocument::getSlugURI($slug);
-      $href     = (string)id(new PhutilURI($slug))->setFragment($fragment);
+      $uri = new PhutilURI($link);
+      $slug = $uri->getPath();
+      $slug = PhabricatorSlug::normalize($slug);
+      $slug = PhrictionDocument::getSlugURI($slug);
+
+      $anchor = idx($spec, 'anchor');
+      $href = (string)id(new PhutilURI($slug))->setFragment($anchor);
 
       $text_mode = $this->getEngine()->isTextMode();
       $mail_mode = $this->getEngine()->isHTMLMailMode();
