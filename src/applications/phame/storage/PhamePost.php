@@ -18,6 +18,7 @@ final class PhamePost extends PhameDAO
 
   protected $bloggerPHID;
   protected $title;
+  protected $subtitle;
   protected $phameTitle;
   protected $body;
   protected $visibility;
@@ -25,8 +26,10 @@ final class PhamePost extends PhameDAO
   protected $datePublished;
   protected $blogPHID;
   protected $mailKey;
+  protected $headerImagePHID;
 
   private $blog = self::ATTACHABLE;
+  private $headerImageFile = self::ATTACHABLE;
 
   public static function initializePost(
     PhabricatorUser $blogger,
@@ -49,6 +52,10 @@ final class PhamePost extends PhameDAO
 
   public function getBlog() {
     return $this->assertAttached($this->blog);
+  }
+
+  public function getMonogram() {
+    return 'J'.$this->getID();
   }
 
   public function getLiveURI() {
@@ -86,6 +93,18 @@ final class PhamePost extends PhameDAO
     return "/phame/post/view/{$id}/{$slug}/";
   }
 
+  public function getBestURI($is_live, $is_external) {
+    if ($is_live) {
+      if ($is_external) {
+        return $this->getExternalLiveURI();
+      } else {
+        return $this->getInternalLiveURI();
+      }
+    } else {
+      return $this->getViewURI();
+    }
+  }
+
   public function getEditURI() {
     return '/phame/post/edit/'.$this->getID().'/';
   }
@@ -106,9 +125,11 @@ final class PhamePost extends PhameDAO
       ),
       self::CONFIG_COLUMN_SCHEMA => array(
         'title' => 'text255',
+        'subtitle' => 'text64',
         'phameTitle' => 'sort64?',
         'visibility' => 'uint32',
         'mailKey' => 'bytes20',
+        'headerImagePHID' => 'phid?',
 
         // T6203/NULLABILITY
         // These seem like they should always be non-null?
@@ -152,6 +173,19 @@ final class PhamePost extends PhameDAO
 
   public function getSlug() {
     return PhabricatorSlug::normalizeProjectSlug($this->getTitle(), true);
+  }
+
+  public function getHeaderImageURI() {
+    return $this->getHeaderImageFile()->getBestURI();
+  }
+
+  public function attachHeaderImageFile(PhabricatorFile $file) {
+    $this->headerImageFile = $file;
+    return $this;
+  }
+
+  public function getHeaderImageFile() {
+    return $this->assertAttached($this->headerImageFile);
   }
 
 
@@ -258,15 +292,15 @@ final class PhamePost extends PhameDAO
     return $timeline;
   }
 
+
 /* -(  PhabricatorDestructibleInterface  )----------------------------------- */
+
 
   public function destroyObjectPermanently(
     PhabricatorDestructionEngine $engine) {
 
     $this->openTransaction();
-
       $this->delete();
-
     $this->saveTransaction();
   }
 

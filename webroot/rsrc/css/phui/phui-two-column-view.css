@@ -23,7 +23,7 @@
 }
 
 .device-phone .phui-two-column-header .phui-header-header {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .phui-two-column-view .phui-two-column-header .phui-header-shell {
@@ -155,17 +155,8 @@
     display: none;
 }
 
-.phui-two-column-properties.phui-object-box {
-  border: 1px solid rgba({$alphablue}, .2);
-}
-
 .device .phui-two-column-content .phui-two-column-properties.phui-object-box {
   padding: 0 12px;
-}
-
-.phui-two-column-properties .phabricator-action-view-icon {
-  top: 8px;
-  left: 8px;
 }
 
 .phabricator-action-view button.phabricator-action-view-item,
@@ -203,6 +194,11 @@
   padding: 16px;
 }
 
+.device .phui-two-column-view .phui-info-view {
+  margin: 0 0 20px 0;
+  padding: 12px;
+}
+
 .phui-two-column-view .phui-side-column .phui-object-item-empty
   .phui-info-view {
    margin-bottom: 0;
@@ -212,6 +208,11 @@
 .phui-two-column-view .phui-box-blue-property
   .phui-header-shell + .phui-info-view {
     margin: 16px;
+}
+
+.device .phui-two-column-view .phui-box-blue-property
+  .phui-header-shell + .phui-info-view {
+    margin: 8px;
 }
 
 /* Navigation */

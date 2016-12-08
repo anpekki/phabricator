@@ -67,7 +67,7 @@
   padding: 1px 4px;
 }
 
-.device .differential-diff .inline td {
+.device .differential-diff .inline > td {
   padding: 4px;
 }
 
@@ -94,6 +94,7 @@
 }
 
 .prose-diff {
+  padding: 12px 0;
   white-space: pre-wrap;
   color: {$greytext};
 }
@@ -308,7 +309,7 @@ td.cov-I {
   box-sizing: border-box;
 }
 
-.differential-diff .inline td {
+.differential-diff .inline > td {
   padding: 8px 12px;
 }
 
@@ -348,12 +349,9 @@ td.cov-I {
   margin-right: 12px;
 }
 
-.device-phone .differential-changeset-buttons {
-  float: none;
-  margin: 0 0 8px 4px;
-}
-
-.differential-changeset-buttons a.button {
+.device-phone .differential-changeset-buttons .button .phui-button-text {
+  visibility: hidden;
+  width: 0;
   margin-left: 8px;
 }
 

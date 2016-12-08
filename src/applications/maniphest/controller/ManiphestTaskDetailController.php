@@ -30,24 +30,19 @@ final class ManiphestTaskDetailController extends ManiphestController {
       ->setViewer($viewer)
       ->setTargetObject($task);
 
-    $e_commit = ManiphestTaskHasCommitEdgeType::EDGECONST;
-    $e_dep_on = ManiphestTaskDependsOnTaskEdgeType::EDGECONST;
-    $e_dep_by = ManiphestTaskDependedOnByTaskEdgeType::EDGECONST;
-    $e_rev    = ManiphestTaskHasRevisionEdgeType::EDGECONST;
-    $e_mock   = ManiphestTaskHasMockEdgeType::EDGECONST;
+    $edge_types = array(
+      ManiphestTaskHasCommitEdgeType::EDGECONST,
+      ManiphestTaskHasRevisionEdgeType::EDGECONST,
+      ManiphestTaskHasMockEdgeType::EDGECONST,
+      PhabricatorObjectMentionedByObjectEdgeType::EDGECONST,
+      PhabricatorObjectMentionsObjectEdgeType::EDGECONST,
+    );
 
     $phid = $task->getPHID();
 
     $query = id(new PhabricatorEdgeQuery())
       ->withSourcePHIDs(array($phid))
-      ->withEdgeTypes(
-        array(
-          $e_commit,
-          $e_dep_on,
-          $e_dep_by,
-          $e_rev,
-          $e_mock,
-        ));
+      ->withEdgeTypes($edge_types);
     $edges = idx($query->execute(), $phid);
     $phids = array_fill_keys($query->getDestinationPHIDs(), true);
 
@@ -81,15 +76,124 @@ final class ManiphestTaskDetailController extends ManiphestController {
     $timeline->setQuoteRef($monogram);
     $comment_view->setTransactionTimeline($timeline);
 
+    $related_tabs = array();
+    $graph_menu = null;
+
+    $graph_limit = 100;
+    $task_graph = id(new ManiphestTaskGraph())
+      ->setViewer($viewer)
+      ->setSeedPHID($task->getPHID())
+      ->setLimit($graph_limit)
+      ->loadGraph();
+    if (!$task_graph->isEmpty()) {
+      $parent_type = ManiphestTaskDependedOnByTaskEdgeType::EDGECONST;
+      $subtask_type = ManiphestTaskDependsOnTaskEdgeType::EDGECONST;
+      $parent_map = $task_graph->getEdges($parent_type);
+      $subtask_map = $task_graph->getEdges($subtask_type);
+      $parent_list = idx($parent_map, $task->getPHID(), array());
+      $subtask_list = idx($subtask_map, $task->getPHID(), array());
+      $has_parents = (bool)$parent_list;
+      $has_subtasks = (bool)$subtask_list;
+
+      $search_text = pht('Search...');
+
+      // First, get a count of direct parent tasks and subtasks. If there
+      // are too many of these, we just don't draw anything. You can use
+      // the search button to browse tasks with the search UI instead.
+      $direct_count = count($parent_list) + count($subtask_list);
+
+      if ($direct_count > $graph_limit) {
+        $message = pht(
+          'Task graph too large to display (this task is directly connected '.
+          'to more than %s other tasks). Use %s to explore connected tasks.',
+          $graph_limit,
+          phutil_tag('strong', array(), $search_text));
+        $message = phutil_tag('em', array(), $message);
+        $graph_table = id(new PHUIPropertyListView())
+          ->addTextContent($message);
+      } else {
+        // If there aren't too many direct tasks, but there are too many total
+        // tasks, we'll only render directly connected tasks.
+        if ($task_graph->isOverLimit()) {
+          $task_graph->setRenderOnlyAdjacentNodes(true);
+        }
+        $graph_table = $task_graph->newGraphTable();
+      }
+
+      $parents_uri = urisprintf(
+        '/?subtaskIDs=%d#R',
+        $task->getID());
+      $parents_uri = $this->getApplicationURI($parents_uri);
+
+      $subtasks_uri = urisprintf(
+        '/?parentIDs=%d#R',
+        $task->getID());
+      $subtasks_uri = $this->getApplicationURI($subtasks_uri);
+
+      $dropdown_menu = id(new PhabricatorActionListView())
+        ->setViewer($viewer)
+        ->addAction(
+          id(new PhabricatorActionView())
+            ->setHref($parents_uri)
+            ->setName(pht('Search Parent Tasks'))
+            ->setDisabled(!$has_parents)
+            ->setIcon('fa-chevron-circle-up'))
+        ->addAction(
+          id(new PhabricatorActionView())
+            ->setHref($subtasks_uri)
+            ->setName(pht('Search Subtasks'))
+            ->setDisabled(!$has_subtasks)
+            ->setIcon('fa-chevron-circle-down'));
+
+      $graph_menu = id(new PHUIButtonView())
+        ->setTag('a')
+        ->setIcon('fa-search')
+        ->setText($search_text)
+        ->setDropdownMenu($dropdown_menu);
+
+      $related_tabs[] = id(new PHUITabView())
+        ->setName(pht('Task Graph'))
+        ->setKey('graph')
+        ->appendChild($graph_table);
+    }
+
+    $related_tabs[] = $this->newMocksTab($task, $query);
+    $related_tabs[] = $this->newMentionsTab($task, $query);
+
+    $tab_view = null;
+
+    $related_tabs = array_filter($related_tabs);
+    if ($related_tabs) {
+      $tab_group = new PHUITabGroupView();
+      foreach ($related_tabs as $tab) {
+        $tab_group->addTab($tab);
+      }
+
+      $related_header = id(new PHUIHeaderView())
+        ->setHeader(pht('Related Objects'));
+
+      if ($graph_menu) {
+        $related_header->addActionLink($graph_menu);
+      }
+
+      $tab_view = id(new PHUIObjectBoxView())
+        ->setHeader($related_header)
+        ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+        ->addTabGroup($tab_group);
+    }
+
     $view = id(new PHUITwoColumnView())
       ->setHeader($header)
       ->setCurtain($curtain)
-      ->setMainColumn(array(
-        $timeline,
-        $comment_view,
-      ))
+      ->setMainColumn(
+        array(
+          $tab_view,
+          $timeline,
+          $comment_view,
+        ))
       ->addPropertySection(pht('Description'), $description)
       ->addPropertySection(pht('Details'), $details);
+
 
     return $this->newPage()
       ->setTitle($title)
@@ -98,10 +202,7 @@ final class ManiphestTaskDetailController extends ManiphestController {
         array(
           $task->getPHID(),
         ))
-      ->appendChild(
-        array(
-          $view,
-      ));
+      ->appendChild($view);
 
   }
 
@@ -166,15 +267,6 @@ final class ManiphestTaskDetailController extends ManiphestController {
         ->setDisabled(!$can_edit)
         ->setWorkflow(!$can_edit));
 
-    $curtain->addAction(
-      id(new PhabricatorActionView())
-        ->setName(pht('Merge Duplicates In'))
-        ->setHref("/search/attach/{$phid}/TASK/merge/")
-        ->setWorkflow(true)
-        ->setIcon('fa-compress')
-        ->setDisabled(!$can_edit)
-        ->setWorkflow(true));
-
     $edit_config = $edit_engine->loadDefaultEditConfiguration();
     $can_create = (bool)$edit_config;
 
@@ -195,23 +287,35 @@ final class ManiphestTaskDetailController extends ManiphestController {
       $edit_uri = $this->getApplicationURI($edit_uri);
     }
 
-    $curtain->addAction(
-      id(new PhabricatorActionView())
-        ->setName(pht('Create Subtask'))
-        ->setHref($edit_uri)
-        ->setIcon('fa-level-down')
-        ->setDisabled(!$can_create)
-        ->setWorkflow(!$can_create));
+    $subtask_item = id(new PhabricatorActionView())
+      ->setName(pht('Create Subtask'))
+      ->setHref($edit_uri)
+      ->setIcon('fa-level-down')
+      ->setDisabled(!$can_create)
+      ->setWorkflow(!$can_create);
 
-    $curtain->addAction(
-      id(new PhabricatorActionView())
-        ->setName(pht('Edit Blocking Tasks'))
-        ->setHref("/search/attach/{$phid}/TASK/blocks/")
-        ->setWorkflow(true)
-        ->setIcon('fa-link')
-        ->setDisabled(!$can_edit)
-        ->setWorkflow(true));
+    $relationship_list = PhabricatorObjectRelationshipList::newForObject(
+      $viewer,
+      $task);
 
+    $submenu_actions = array(
+      $subtask_item,
+      ManiphestTaskHasParentRelationship::RELATIONSHIPKEY,
+      ManiphestTaskHasSubtaskRelationship::RELATIONSHIPKEY,
+      ManiphestTaskMergeInRelationship::RELATIONSHIPKEY,
+      ManiphestTaskCloseAsDuplicateRelationship::RELATIONSHIPKEY,
+    );
+
+    $task_submenu = $relationship_list->newActionSubmenu($submenu_actions)
+      ->setName(pht('Edit Related Tasks...'))
+      ->setIcon('fa-anchor');
+
+    $curtain->addAction($task_submenu);
+
+    $relationship_submenu = $relationship_list->newActionMenu();
+    if ($relationship_submenu) {
+      $curtain->addAction($relationship_submenu);
+    }
 
     $owner_phid = $task->getOwnerPHID();
     $author_phid = $task->getAuthorPHID();
@@ -276,14 +380,8 @@ final class ManiphestTaskDetailController extends ManiphestController {
     }
 
     $edge_types = array(
-      ManiphestTaskDependedOnByTaskEdgeType::EDGECONST
-        => pht('Blocks'),
-      ManiphestTaskDependsOnTaskEdgeType::EDGECONST
-        => pht('Blocked By'),
       ManiphestTaskHasRevisionEdgeType::EDGECONST
         => pht('Differential Revisions'),
-      ManiphestTaskHasMockEdgeType::EDGECONST
-        => pht('Pholio Mocks'),
     );
 
     $revisions_commits = array();
@@ -360,5 +458,96 @@ final class ManiphestTaskDetailController extends ManiphestController {
 
     return $section;
   }
+
+  private function newMocksTab(
+    ManiphestTask $task,
+    PhabricatorEdgeQuery $edge_query) {
+
+    $mock_type = ManiphestTaskHasMockEdgeType::EDGECONST;
+    $mock_phids = $edge_query->getDestinationPHIDs(array(), array($mock_type));
+    if (!$mock_phids) {
+      return null;
+    }
+
+    $viewer = $this->getViewer();
+    $handles = $viewer->loadHandles($mock_phids);
+
+    // TODO: It would be nice to render this as pinboard-style thumbnails,
+    // similar to "{M123}", instead of a list of links.
+
+    $view = id(new PHUIPropertyListView())
+      ->addProperty(pht('Mocks'), $handles->renderList());
+
+    return id(new PHUITabView())
+      ->setName(pht('Mocks'))
+      ->setKey('mocks')
+      ->appendChild($view);
+  }
+
+  private function newMentionsTab(
+    ManiphestTask $task,
+    PhabricatorEdgeQuery $edge_query) {
+
+    $in_type = PhabricatorObjectMentionedByObjectEdgeType::EDGECONST;
+    $out_type = PhabricatorObjectMentionsObjectEdgeType::EDGECONST;
+
+    $in_phids = $edge_query->getDestinationPHIDs(array(), array($in_type));
+    $out_phids = $edge_query->getDestinationPHIDs(array(), array($out_type));
+
+    // Filter out any mentioned users from the list. These are not generally
+    // very interesting to show in a relationship summary since they usually
+    // end up as subscribers anyway.
+
+    $user_type = PhabricatorPeopleUserPHIDType::TYPECONST;
+    foreach ($out_phids as $key => $out_phid) {
+      if (phid_get_type($out_phid) == $user_type) {
+        unset($out_phids[$key]);
+      }
+    }
+
+    if (!$in_phids && !$out_phids) {
+      return null;
+    }
+
+    $viewer = $this->getViewer();
+    $in_handles = $viewer->loadHandles($in_phids);
+    $out_handles = $viewer->loadHandles($out_phids);
+
+    $in_handles = $this->getCompleteHandles($in_handles);
+    $out_handles = $this->getCompleteHandles($out_handles);
+
+    if (!count($in_handles) && !count($out_handles)) {
+      return null;
+    }
+
+    $view = new PHUIPropertyListView();
+
+    if (count($in_handles)) {
+      $view->addProperty(pht('Mentioned In'), $in_handles->renderList());
+    }
+
+    if (count($out_handles)) {
+      $view->addProperty(pht('Mentioned Here'), $out_handles->renderList());
+    }
+
+    return id(new PHUITabView())
+      ->setName(pht('Mentions'))
+      ->setKey('mentions')
+      ->appendChild($view);
+  }
+
+  private function getCompleteHandles(PhabricatorHandleList $handles) {
+    $phids = array();
+
+    foreach ($handles as $phid => $handle) {
+      if (!$handle->isComplete()) {
+        continue;
+      }
+      $phids[] = $phid;
+    }
+
+    return $handles->newSublist($phids);
+  }
+
 
 }

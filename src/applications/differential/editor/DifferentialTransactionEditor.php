@@ -182,6 +182,7 @@ final class DifferentialTransactionEditor
     $status_revision = ArcanistDifferentialRevisionStatus::NEEDS_REVISION;
     $status_plan = ArcanistDifferentialRevisionStatus::CHANGES_PLANNED;
     $status_abandoned = ArcanistDifferentialRevisionStatus::ABANDONED;
+    $status_accepted = ArcanistDifferentialRevisionStatus::ACCEPTED;
 
     switch ($xaction->getTransactionType()) {
       case DifferentialTransaction::TYPE_INLINE:
@@ -233,7 +234,12 @@ final class DifferentialTransactionEditor
             $object->setStatus($status_review);
             return;
           case DifferentialAction::ACTION_CLOSE:
+            $old_status = $object->getStatus();
             $object->setStatus(ArcanistDifferentialRevisionStatus::CLOSED);
+            $was_accepted = ($old_status == $status_accepted);
+            $object->setProperty(
+              DifferentialRevision::PROPERTY_CLOSED_FROM_ACCEPTED,
+              $was_accepted);
             return;
           case DifferentialAction::ACTION_CLAIM:
             $object->setAuthorPHID($this->getActingAsPHID());
@@ -1258,11 +1264,30 @@ final class DifferentialTransactionEditor
       $config_attach = PhabricatorEnv::getEnvConfig($config_key_attach);
 
       if ($config_inline || $config_attach) {
-        $patch = $this->buildPatchForMail($diff);
-        $lines = substr_count($patch, "\n");
+        $body_limit = PhabricatorEnv::getEnvConfig('metamta.email-body-limit');
 
-        if ($config_inline && ($lines <= $config_inline)) {
-          $this->appendChangeDetailsForMail($object, $diff, $patch, $body);
+        $patch = $this->buildPatchForMail($diff);
+        if ($config_inline) {
+          $lines = substr_count($patch, "\n");
+          $bytes = strlen($patch);
+
+          // Limit the patch size to the smaller of 256 bytes per line or
+          // the mail body limit. This prevents degenerate behavior for patches
+          // with one line that is 10MB long. See T11748.
+          $byte_limits = array();
+          $byte_limits[] = (256 * $config_inline);
+          $byte_limits[] = $body_limit;
+          $byte_limit = min($byte_limits);
+
+          $lines_ok = ($lines <= $config_inline);
+          $bytes_ok = ($bytes <= $byte_limit);
+
+          if ($lines_ok && $bytes_ok) {
+            $this->appendChangeDetailsForMail($object, $diff, $patch, $body);
+          } else {
+            // TODO: Provide a helpful message about the patch being too
+            // large or lengthy here.
+          }
         }
 
         if ($config_attach) {
@@ -1505,13 +1530,6 @@ final class DifferentialTransactionEditor
     $packages = PhabricatorOwnersPackage::loadAffectedPackages(
       $repository,
       $this->affectedPaths);
-
-    foreach ($packages as $key => $package) {
-      if ($package->isArchived()) {
-        unset($packages[$key]);
-      }
-    }
-
     if (!$packages) {
       return array();
     }
@@ -1527,7 +1545,7 @@ final class DifferentialTransactionEditor
 
     foreach ($packages as $key => $package) {
       $package_phid = $package->getPHID();
-      if ($authority[$package_phid]) {
+      if (isset($authority[$package_phid])) {
         unset($packages[$key]);
         continue;
       }

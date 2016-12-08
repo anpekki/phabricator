@@ -129,10 +129,6 @@ final class PhabricatorBadgesBadge extends PhabricatorBadgesDAO
     return false;
   }
 
-  public function describeAutomaticCapability($capability) {
-    return null;
-  }
-
 
 /* -(  PhabricatorApplicationTransactionInterface  )------------------------- */
 
@@ -186,7 +182,7 @@ final class PhabricatorBadgesBadge extends PhabricatorBadgesDAO
       ->execute();
 
     foreach ($awards as $award) {
-      $engine->destroyObjectPermanently($award);
+      $engine->destroyObject($award);
     }
 
     $this->openTransaction();

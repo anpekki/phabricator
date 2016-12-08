@@ -28,7 +28,10 @@ final class PhabricatorProjectDatasource
       ->needImages(true)
       ->needSlugs(true);
 
-    if ($tokens) {
+    if ($this->getPhase() == self::PHASE_PREFIX) {
+      $prefix = $this->getPrefixQuery();
+      $query->withNamePrefixes(array($prefix));
+    } else if ($tokens) {
       $query->withNameTokens($tokens);
     }
 
@@ -55,9 +58,25 @@ final class PhabricatorProjectDatasource
       $has_cols = array_fill_keys(array_keys($projs), true);
     }
 
+    $is_browse = $this->getIsBrowse();
+    if ($is_browse && $projs) {
+      // TODO: This is a little ad-hoc, but we don't currently have
+      // infrastructure for bulk querying custom fields efficiently.
+      $table = new PhabricatorProjectCustomFieldStorage();
+      $descriptions = $table->loadAllWhere(
+        'objectPHID IN (%Ls) AND fieldIndex = %s',
+        array_keys($projs),
+        PhabricatorHash::digestForIndex('std:project:internal:description'));
+      $descriptions = mpull($descriptions, 'getFieldValue', 'getObjectPHID');
+    } else {
+      $descriptions = array();
+    }
+
     $results = array();
     foreach ($projs as $proj) {
-      if (!isset($has_cols[$proj->getPHID()])) {
+      $phid = $proj->getPHID();
+
+      if (!isset($has_cols[$phid])) {
         continue;
       }
 
@@ -84,22 +103,17 @@ final class PhabricatorProjectDatasource
 
       $all_strings = array();
       $all_strings[] = $proj->getDisplayName();
-
-      // Add an extra space after the name so that the original project
-      // sorts ahead of milestones. This is kind of a hack but ehh?
-      $all_strings[] = null;
-
       foreach ($proj->getSlugs() as $project_slug) {
         $all_strings[] = $project_slug->getSlug();
       }
-      $all_strings = implode(' ', $all_strings);
+      $all_strings = implode("\n", $all_strings);
 
       $proj_result = id(new PhabricatorTypeaheadResult())
         ->setName($all_strings)
         ->setDisplayName($proj->getDisplayName())
         ->setDisplayType($proj->getDisplayIconName())
         ->setURI($proj->getURI())
-        ->setPHID($proj->getPHID())
+        ->setPHID($phid)
         ->setIcon($proj->getDisplayIconIcon())
         ->setColor($proj->getColor())
         ->setPriorityType('proj')
@@ -110,6 +124,16 @@ final class PhabricatorProjectDatasource
       }
 
       $proj_result->setImageURI($proj->getProfileImageURI());
+
+      if ($is_browse) {
+        $proj_result->addAttribute($proj->getDisplayIconName());
+
+        $description = idx($descriptions, $phid);
+        if (strlen($description)) {
+          $summary = PhabricatorMarkupEngine::summarizeSentence($description);
+          $proj_result->addAttribute($summary);
+        }
+      }
 
       $results[] = $proj_result;
     }

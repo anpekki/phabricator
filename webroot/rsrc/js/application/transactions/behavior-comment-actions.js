@@ -58,7 +58,8 @@ JX.behavior('comment-actions', function(config) {
     var control = new JX.PHUIXFormControl()
       .setLabel(action.label)
       .setError(remove)
-      .setControl(action.type, action.spec);
+      .setControl(action.type, action.spec)
+      .setClass('phui-comment-action');
     var node = control.getNode();
 
     JX.Stratcom.addSigil(node, 'touchable');
@@ -176,17 +177,28 @@ JX.behavior('comment-actions', function(config) {
     JX.DOM.listen(form_node, 'shouldRefresh', null, always_trigger);
     request.start();
 
+    var old_device = JX.Device.getDevice();
+
     var ondevicechange = function() {
+      var new_device = JX.Device.getDevice();
+
       var panel = JX.$(config.panelID);
-      if (JX.Device.getDevice() == 'desktop') {
+      if (new_device == 'desktop') {
         request.setRateLimit(500);
-        always_trigger();
+
+        // Force an immediate refresh if we switched from another device type
+        // to desktop.
+        if (old_device != new_device) {
+          always_trigger();
+        }
       } else {
         // On mobile, don't show live previews and only save drafts every
         // 10 seconds.
         request.setRateLimit(10000);
         JX.DOM.hide(panel);
       }
+
+      old_device = new_device;
     };
 
     ondevicechange();

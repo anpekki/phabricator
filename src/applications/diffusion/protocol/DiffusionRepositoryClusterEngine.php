@@ -104,7 +104,7 @@ final class DiffusionRepositoryClusterEngine extends Phobject {
     // We identify all the cluster leaders and reset their version to 0.
     // We identify all the cluster followers and demote them.
 
-    // This allows the cluter to start over again at version 0 but keep the
+    // This allows the cluster to start over again at version 0 but keep the
     // same leaders.
 
     if ($versions) {
@@ -175,7 +175,8 @@ final class DiffusionRepositoryClusterEngine extends Phobject {
         pht(
           'Failed to acquire read lock after waiting %s second(s). You '.
           'may be able to retry later.',
-          new PhutilNumber($lock_wait)));
+          new PhutilNumber($lock_wait)),
+        $ex);
     }
 
     $versions = PhabricatorRepositoryWorkingCopyVersion::loadVersions(
@@ -598,7 +599,7 @@ final class DiffusionRepositoryClusterEngine extends Phobject {
       ->setArgv($argv)
       ->setSudoAsDaemon(true)
       ->setCredentialPHID($repository->getCredentialPHID())
-      ->setURI($repository->getRemoteURI())
+      ->setURI($repository->getRemoteURIObject())
       ->newFuture();
 
     $future->setCWD($local_path);

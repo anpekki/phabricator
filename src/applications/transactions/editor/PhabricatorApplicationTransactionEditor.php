@@ -502,6 +502,15 @@ abstract class PhabricatorApplicationTransactionEditor
         return false;
     }
 
+    $type = $xaction->getTransactionType();
+    $xtype = $this->getModularTransactionType($type);
+    if ($xtype) {
+      return $xtype->getTransactionHasEffect(
+        $object,
+        $xaction->getOldValue(),
+        $xaction->getNewValue());
+    }
+
     return ($xaction->getOldValue() !== $xaction->getNewValue());
   }
 
@@ -931,6 +940,7 @@ abstract class PhabricatorApplicationTransactionEditor
       $object->openTransaction();
     }
 
+    try {
       foreach ($xactions as $xaction) {
         $this->applyInternalEffects($object, $xaction);
       }
@@ -940,8 +950,6 @@ abstract class PhabricatorApplicationTransactionEditor
       try {
         $object->save();
       } catch (AphrontDuplicateKeyQueryException $ex) {
-        $object->killTransaction();
-
         // This callback has an opportunity to throw a better exception,
         // so execution may end here.
         $this->didCatchDuplicateKeyException($object, $xactions, $ex);
@@ -973,7 +981,15 @@ abstract class PhabricatorApplicationTransactionEditor
         $read_locking = false;
       }
 
-    $object->saveTransaction();
+      $object->saveTransaction();
+    } catch (Exception $ex) {
+      $object->killTransaction();
+      throw $ex;
+    }
+
+    // If we need to perform cache engine updates, execute them now.
+    id(new PhabricatorCacheEngine())
+      ->updateObject($object);
 
     // Now that we've completely applied the core transaction set, try to apply
     // Herald rules. Herald rules are allowed to either take direct actions on
@@ -1138,8 +1154,14 @@ abstract class PhabricatorApplicationTransactionEditor
     PhabricatorLiskDAO $object,
     array $xactions) {
 
+    $this->object = $object;
+    $this->xactions = $xactions;
+
     // Hook for edges or other properties that may need (re-)loading
     $object = $this->willPublish($object, $xactions);
+
+    // The object might have changed, so reassign it.
+    $this->object = $object;
 
     $messages = array();
     if (!$this->getDisableEmail()) {
@@ -2868,10 +2890,22 @@ abstract class PhabricatorApplicationTransactionEditor
     foreach ($details as $xaction) {
       $details = $xaction->renderChangeDetailsForMail($body->getViewer());
       if ($details !== null) {
-        $body->addHTMLSection(pht('EDIT DETAILS'), $details);
+        $label = $this->getMailDiffSectionHeader($xaction);
+        $body->addHTMLSection($label, $details);
       }
     }
 
+  }
+
+  private function getMailDiffSectionHeader($xaction) {
+    $type = $xaction->getTransactionType();
+
+    $xtype = $this->getModularTransactionType($type);
+    if ($xtype) {
+      return $xtype->getMailDiffSectionHeader();
+    }
+
+    return pht('EDIT DETAILS');
   }
 
   /**

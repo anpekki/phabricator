@@ -7,6 +7,10 @@ abstract class PhabricatorModularTransaction
 
   abstract public function getBaseTransactionClass();
 
+  public function getModularType() {
+    return $this->getTransactionImplementation();
+  }
+
   final protected function getTransactionImplementation() {
     if (!$this->implementation) {
       $this->implementation = $this->newTransactionImplementation();
@@ -98,6 +102,15 @@ abstract class PhabricatorModularTransaction
     return parent::getTitle();
   }
 
+  public function getTitleForMail() {
+    $old_target = $this->getRenderingTarget();
+    $new_target = self::TARGET_TEXT;
+    $this->setRenderingTarget($new_target);
+    $title = $this->getTitle();
+    $this->setRenderingTarget($old_target);
+    return $title;
+  }
+
   final public function getTitleForFeed() {
     $title = $this->getTransactionImplementation()->getTitleForFeed();
     if ($title !== null) {
@@ -114,6 +127,11 @@ abstract class PhabricatorModularTransaction
     }
 
     return parent::getColor();
+  }
+
+  public function attachViewer(PhabricatorUser $viewer) {
+    $this->getTransactionImplementation()->setViewer($viewer);
+    return parent::attachViewer($viewer);
   }
 
   final public function hasChangeDetails() {
@@ -133,6 +151,10 @@ abstract class PhabricatorModularTransaction
     }
 
     return parent::renderChangeDetails($viewer);
+  }
+
+  final protected function newRemarkupChanges() {
+    return $this->getTransactionImplementation()->newRemarkupChanges();
   }
 
 }

@@ -68,6 +68,10 @@ final class PhamePostEditEngine
     return $object->getViewURI();
   }
 
+  protected function getEditorURI() {
+    return $this->getApplication()->getApplicationURI('post/edit/');
+  }
+
   protected function buildCustomEditFields($object) {
     $blog_phid = $object->getBlog()->getPHID();
 
@@ -95,6 +99,14 @@ final class PhamePostEditEngine
         ->setConduitTypeDescription(pht('New post title.'))
         ->setTransactionType(PhamePostTransaction::TYPE_TITLE)
         ->setValue($object->getTitle()),
+      id(new PhabricatorTextEditField())
+        ->setKey('subtitle')
+        ->setLabel(pht('Subtitle'))
+        ->setDescription(pht('Post subtitle.'))
+        ->setConduitDescription(pht('Change the post subtitle.'))
+        ->setConduitTypeDescription(pht('New post subtitle.'))
+        ->setTransactionType(PhamePostTransaction::TYPE_SUBTITLE)
+        ->setValue($object->getSubtitle()),
       id(new PhabricatorSelectEditField())
         ->setKey('visibility')
         ->setLabel(pht('Visibility'))

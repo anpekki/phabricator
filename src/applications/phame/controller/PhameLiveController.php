@@ -58,6 +58,7 @@ abstract class PhameLiveController extends PhameController {
       $blog_query = id(new PhameBlogQuery())
         ->setViewer($viewer)
         ->needProfileImage(true)
+        ->needHeaderImage(true)
         ->withIDs(array($blog_id));
 
       // If this is a live view, only show active blogs.
@@ -86,9 +87,10 @@ abstract class PhameLiveController extends PhameController {
     $this->isExternal = $is_external;
     $this->isLive = $is_live;
 
-    if ($post_id) {
+    if (strlen($post_id)) {
       $post_query = id(new PhamePostQuery())
         ->setViewer($viewer)
+        ->needHeaderImage(true)
         ->withIDs(array($post_id));
 
       if ($blog) {
@@ -103,6 +105,8 @@ abstract class PhameLiveController extends PhameController {
 
       $post = $post_query->executeOne();
       if (!$post) {
+        // Not a valid Post
+        $this->blog = $blog;
         return new Aphront404Response();
       }
 
@@ -158,6 +162,12 @@ abstract class PhameLiveController extends PhameController {
     // "Blogs" crumb into the crumbs list.
     if ($is_external) {
       $crumbs = new PHUICrumbsView();
+      // Link back to parent site
+      if ($blog->getParentSite() && $blog->getParentDomain()) {
+        $crumbs->addTextCrumb(
+          $blog->getParentSite(),
+          $blog->getExternalParentURI());
+      }
     } else {
       $crumbs = parent::buildApplicationCrumbs();
       $crumbs->addTextCrumb(
@@ -186,7 +196,9 @@ abstract class PhameLiveController extends PhameController {
     }
 
     if ($post) {
-      $crumbs->addTextCrumb($post->getTitle());
+      if (!$is_external) {
+        $crumbs->addTextCrumb('J'.$post->getID());
+      }
     }
 
     return $crumbs;
@@ -211,6 +223,7 @@ abstract class PhameLiveController extends PhameController {
 
     if ($this->getIsLive()) {
       $page
+        ->addClass('phame-live-view')
         ->setShowChrome(false)
         ->setShowFooter(false);
     }
