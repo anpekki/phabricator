@@ -100,10 +100,11 @@ final class PhabricatorCalendarNotificationEngine
         }
         $notifiable_phids[] = $invitee->getInviteePHID();
       }
-      if (!$notifiable_phids) {
+      if ($notifiable_phids) {
+        $attendee_map[$key] = array_fuse($notifiable_phids);
+      } else {
         unset($events[$key]);
       }
-      $attendee_map[$key] = array_fuse($notifiable_phids);
     }
     if (!$attendee_map) {
       // None of the events have any notifiable attendees, so there is no
@@ -268,7 +269,7 @@ final class PhabricatorCalendarNotificationEngine
           '%s is starting in %s minute(s), at %s.',
           $event->getEvent()->getName(),
           $event->getDisplayMinutes(),
-          $event->getDisplayTime()));
+          $event->getDisplayTimeWithTimezone()));
 
       $body->addLinkSection(
         pht('EVENT DETAIL'),

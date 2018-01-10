@@ -19,6 +19,7 @@ final class PhabricatorUser
     PhabricatorFlaggableInterface,
     PhabricatorApplicationTransactionInterface,
     PhabricatorFulltextInterface,
+    PhabricatorFerretInterface,
     PhabricatorConduitResultInterface {
 
   const SESSION_TABLE = 'phabricator_session';
@@ -30,6 +31,8 @@ final class PhabricatorUser
   protected $passwordSalt;
   protected $passwordHash;
   protected $profileImagePHID;
+  protected $defaultProfileImagePHID;
+  protected $defaultProfileImageVersion;
   protected $availabilityCache;
   protected $availabilityCacheTTL;
 
@@ -64,6 +67,7 @@ final class PhabricatorUser
   private $settingCacheKeys = array();
   private $settingCache = array();
   private $allowInlineCacheGeneration;
+  private $conduitClusterToken = self::ATTACHABLE;
 
   protected function readField($field) {
     switch ($field) {
@@ -118,6 +122,32 @@ final class PhabricatorUser
 
     return true;
   }
+
+
+  /**
+   * Is this a user who we can reasonably expect to respond to requests?
+   *
+   * This is used to provide a grey "disabled/unresponsive" dot cue when
+   * rendering handles and tags, so it isn't a surprise if you get ignored
+   * when you ask things of users who will not receive notifications or could
+   * not respond to them (because they are disabled, unapproved, do not have
+   * verified email addresses, etc).
+   *
+   * @return bool True if this user can receive and respond to requests from
+   *   other humans.
+   */
+  public function isResponsive() {
+    if (!$this->isUserActivated()) {
+      return false;
+    }
+
+    if (!$this->getIsEmailVerified()) {
+      return false;
+    }
+
+    return true;
+  }
+
 
   public function canEstablishWebSessions() {
     if ($this->getIsMailingList()) {
@@ -200,6 +230,8 @@ final class PhabricatorUser
         'isEnrolledInMultiFactor' => 'bool',
         'availabilityCache' => 'text255?',
         'availabilityCacheTTL' => 'uint32?',
+        'defaultProfileImagePHID' => 'phid?',
+        'defaultProfileImageVersion' => 'text64?',
       ),
       self::CONFIG_KEY_SCHEMA => array(
         'key_phid' => null,
@@ -228,6 +260,10 @@ final class PhabricatorUser
   public function generatePHID() {
     return PhabricatorPHID::generateNewPHID(
       PhabricatorPeopleUserPHIDType::TYPECONST);
+  }
+
+  public function hasPassword() {
+    return (bool)strlen($this->passwordHash);
   }
 
   public function setPassword(PhutilOpaqueEnvelope $envelope) {
@@ -358,7 +394,7 @@ final class PhabricatorUser
     // Generate a token hash to mitigate BREACH attacks against SSL. See
     // discussion in T3684.
     $token = $this->getRawCSRFToken();
-    $hash = PhabricatorHash::digest($token, $salt);
+    $hash = PhabricatorHash::weakDigest($token, $salt);
     return self::CSRF_BREACH_PREFIX.$salt.substr(
         $hash, 0, self::CSRF_TOKEN_LENGTH);
   }
@@ -375,7 +411,7 @@ final class PhabricatorUser
     $token = substr($token, $breach_prelen + self::CSRF_SALT_LENGTH);
 
     // When the user posts a form, we check that it contains a valid CSRF token.
-    // Tokens cycle each hour (every CSRF_CYLCE_FREQUENCY seconds) and we accept
+    // Tokens cycle each hour (every CSRF_CYCLE_FREQUENCY seconds) and we accept
     // either the current token, the next token (users can submit a "future"
     // token if you have two web frontends that have some clock skew) or any of
     // the last 6 tokens. This means that pages are valid for up to 7 hours.
@@ -404,7 +440,7 @@ final class PhabricatorUser
     for ($ii = -$csrf_window; $ii <= 1; $ii++) {
       $valid = $this->getRawCSRFToken($ii);
 
-      $digest = PhabricatorHash::digest($valid, $salt);
+      $digest = PhabricatorHash::weakDigest($valid, $salt);
       $digest = substr($digest, 0, self::CSRF_TOKEN_LENGTH);
       if (phutil_hashes_are_identical($digest, $token)) {
         return true;
@@ -428,7 +464,7 @@ final class PhabricatorUser
     $time_block = floor($epoch / $frequency);
     $vec = $vec.$key.$time_block;
 
-    return substr(PhabricatorHash::digest($vec), 0, $len);
+    return substr(PhabricatorHash::weakDigest($vec), 0, $len);
   }
 
   public function getUserProfile() {
@@ -817,6 +853,11 @@ final class PhabricatorUser
     return $this->requireCacheData($message_key);
   }
 
+  public function getRecentBadgeAwards() {
+    $badges_key = PhabricatorUserBadgesCacheType::KEY_BADGES;
+    return $this->requireCacheData($badges_key);
+  }
+
   public function getFullName() {
     if (strlen($this->getRealName())) {
       return $this->getUsername().' ('.$this->getRealName().')';
@@ -937,6 +978,19 @@ final class PhabricatorUser
     return $this->authorities;
   }
 
+  public function hasConduitClusterToken() {
+    return ($this->conduitClusterToken !== self::ATTACHABLE);
+  }
+
+  public function attachConduitClusterToken(PhabricatorConduitToken $token) {
+    $this->conduitClusterToken = $token;
+    return $this;
+  }
+
+  public function getConduitClusterToken() {
+    return $this->assertAttached($this->conduitClusterToken);
+  }
+
 
 /* -(  Availability  )------------------------------------------------------- */
 
@@ -1033,7 +1087,7 @@ final class PhabricatorUser
       'UPDATE %T SET availabilityCache = %s, availabilityCacheTTL = %nd
         WHERE id = %d',
       $this->getTableName(),
-      json_encode($availability),
+      phutil_json_encode($availability),
       $ttl,
       $this->getID());
     unset($unguarded);
@@ -1130,7 +1184,7 @@ final class PhabricatorUser
   /**
    * Get a scalar string identifying this user.
    *
-   * This is similar to using the PHID, but distinguishes between ominpotent
+   * This is similar to using the PHID, but distinguishes between omnipotent
    * and public users explicitly. This allows safe construction of cache keys
    * or cache buckets which do not conflate public and omnipotent users.
    *
@@ -1340,7 +1394,7 @@ final class PhabricatorUser
       return '/settings/panel/ssh/';
     } else {
       // Otherwise, take them to the administrative panel for this user.
-      return '/settings/'.$this->getID().'/panel/ssh/';
+      return '/settings/user/'.$this->getUsername().'/page/ssh/';
     }
   }
 
@@ -1385,6 +1439,14 @@ final class PhabricatorUser
   }
 
 
+/* -(  PhabricatorFerretInterface  )----------------------------------------- */
+
+
+  public function newFerretEngine() {
+    return new PhabricatorUserFerretEngine();
+  }
+
+
 /* -(  PhabricatorConduitResultInterface  )---------------------------------- */
 
 
@@ -1401,7 +1463,7 @@ final class PhabricatorUser
       id(new PhabricatorConduitSearchFieldSpecification())
         ->setKey('roles')
         ->setType('list<string>')
-        ->setDescription(pht('List of acccount roles.')),
+        ->setDescription(pht('List of account roles.')),
     );
   }
 
@@ -1538,6 +1600,24 @@ final class PhabricatorUser
     unset($this->rawCacheData[$key]);
     unset($this->usableCacheData[$key]);
     return $this;
+  }
+
+
+  public function getCSSValue($variable_key) {
+    $preference = PhabricatorAccessibilitySetting::SETTINGKEY;
+    $key = $this->getUserSetting($preference);
+
+    $postprocessor = CelerityPostprocessor::getPostprocessor($key);
+    $variables = $postprocessor->getVariables();
+
+    if (!isset($variables[$variable_key])) {
+      throw new Exception(
+        pht(
+          'Unknown CSS variable "%s"!',
+          $variable_key));
+    }
+
+    return $variables[$variable_key];
   }
 
 }

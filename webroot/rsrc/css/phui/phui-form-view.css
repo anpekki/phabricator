@@ -196,6 +196,7 @@
 
 .aphront-form-control-markup .aphront-form-input {
   font-size: {$normalfontsize};
+  padding: 3px 0;
 }
 
 .aphront-form-control-static .aphront-form-input {
@@ -208,14 +209,13 @@
 
 table.aphront-form-control-radio-layout,
 table.aphront-form-control-checkbox-layout {
-  margin-top: 3px;
+  margin-top: 4px !important;
   font-size: {$normalfontsize};
 }
 
 table.aphront-form-control-radio-layout th {
-  padding-top: 3px;
   padding-left: 8px;
-  padding-bottom: 4px;
+  padding-bottom: 8px;
   font-weight: bold;
   color: {$darkgreytext};
 }
@@ -460,8 +460,7 @@ body .phui-form-view .remarkup-assist-textarea.aphront-textarea-drag-and-drop {
 
 .fancy-datepicker-core {
   background-color: white;
-  border: 1px solid {$lightblueborder};
-  border-bottom: 1px solid {$blueborder};
+  border: 1px solid {$lightgreyborder};
   box-shadow: {$dropshadow};
   border-radius: 3px;
 }
@@ -544,4 +543,22 @@ properly, and submit values. */
 
 .device-desktop .aphront-form-error .phui-icon-view:hover {
   color: {$red};
+}
+
+.phui-form-static-action {
+  padding: 4px;
+  color: {$bluetext};
+}
+
+.phuix-form-checkbox-action {
+  padding: 4px;
+  color: {$bluetext};
+}
+
+.phuix-form-checkbox-action input[type=checkbox] {
+  margin: 4px 0;
+}
+
+.phuix-form-checkbox-label {
+  margin-left: 4px;
 }

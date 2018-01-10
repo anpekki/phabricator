@@ -134,7 +134,7 @@ final class PhabricatorFilesConfigOptions
             "Configure which uploaded file types may be viewed directly ".
             "in the browser. Other file types will be downloaded instead ".
             "of displayed. This is mainly a usability consideration, since ".
-            "browsers tend to freak out when viewing enormous binary files.".
+            "browsers tend to freak out when viewing very large binary files.".
             "\n\n".
             "The keys in this map are viewable MIME types; the values are ".
             "the MIME types they are delivered as when they are viewed in ".
@@ -155,6 +155,7 @@ final class PhabricatorFilesConfigOptions
             'List of MIME types which can be rendered with an `%s` tag.',
             '<audio />')),
       $this->newOption('files.video-mime-types', 'set', $video_default)
+        ->setLocked(true)
         ->setSummary(pht('Configure which MIME types are video.'))
         ->setDescription(
           pht(

@@ -11,6 +11,16 @@ final class DifferentialQueryDiffsConduitAPIMethod
     return pht('Query differential diffs which match certain criteria.');
   }
 
+  public function getMethodStatus() {
+    return self::METHOD_STATUS_FROZEN;
+  }
+
+  public function getMethodStatusDescription() {
+    return pht(
+      'This method is frozen and will eventually be deprecated. New code '.
+      'should use "differential.diff.search" instead.');
+  }
+
   protected function defineParamTypes() {
     return array(
       'ids' => 'optional list<uint>',
@@ -26,15 +36,26 @@ final class DifferentialQueryDiffsConduitAPIMethod
     $ids = $request->getValue('ids', array());
     $revision_ids = $request->getValue('revisionIDs', array());
 
-    $diffs = array();
-    if ($ids || $revision_ids) {
-      $diffs = id(new DifferentialDiffQuery())
-        ->setViewer($request->getUser())
-        ->withIDs($ids)
-        ->withRevisionIDs($revision_ids)
-        ->needChangesets(true)
-        ->execute();
+    if (!$ids && !$revision_ids) {
+      // This method just returns nothing if you pass no constraints because
+      // pagination hadn't been invented yet in 2008 when this method was
+      // written.
+      return array();
     }
+
+    $query = id(new DifferentialDiffQuery())
+      ->setViewer($request->getUser())
+      ->needChangesets(true);
+
+    if ($ids) {
+      $query->withIDs($ids);
+    }
+
+    if ($revision_ids) {
+      $query->withRevisionIDs($revision_ids);
+    }
+
+    $diffs = $query->execute();
 
     return mpull($diffs, 'getDiffDict', 'getID');
   }

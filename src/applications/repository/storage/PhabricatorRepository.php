@@ -12,9 +12,12 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     PhabricatorFlaggableInterface,
     PhabricatorMarkupInterface,
     PhabricatorDestructibleInterface,
+    PhabricatorDestructibleCodexInterface,
     PhabricatorProjectInterface,
     PhabricatorSpacesInterface,
-    PhabricatorConduitResultInterface {
+    PhabricatorConduitResultInterface,
+    PhabricatorFulltextInterface,
+    PhabricatorFerretInterface {
 
   /**
    * Shortest hash we'll recognize in raw "a829f32" form.
@@ -56,6 +59,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
   protected $viewPolicy;
   protected $editPolicy;
   protected $pushPolicy;
+  protected $profileImagePHID;
 
   protected $versionControlSystem;
   protected $details = array();
@@ -68,6 +72,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
   private $mostRecentCommit = self::ATTACHABLE;
   private $projectPHIDs = self::ATTACHABLE;
   private $uris = self::ATTACHABLE;
+  private $profileImageFile = self::ATTACHABLE;
 
 
   public static function initializeNewRepository(PhabricatorUser $actor) {
@@ -109,6 +114,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
         'credentialPHID' => 'phid?',
         'almanacServicePHID' => 'phid?',
         'localPath' => 'text128?',
+        'profileImagePHID' => 'phid?',
       ),
       self::CONFIG_KEY_SCHEMA => array(
         'callsign' => array(
@@ -477,6 +483,20 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     }
   }
 
+  public function getProfileImageURI() {
+    return $this->getProfileImageFile()->getBestURI();
+  }
+
+  public function attachProfileImageFile(PhabricatorFile $file) {
+    $this->profileImageFile = $file;
+    return $this;
+  }
+
+  public function getProfileImageFile() {
+    return $this->assertAttached($this->profileImageFile);
+  }
+
+
 
 /* -(  Remote Command Execution  )------------------------------------------- */
 
@@ -681,6 +701,8 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     $action = idx($params, 'action');
     switch ($action) {
       case 'history':
+      case 'graph':
+      case 'clone':
       case 'browse':
       case 'change':
       case 'lastmodified':
@@ -758,6 +780,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     switch ($action) {
       case 'change':
       case 'history':
+      case 'graph':
       case 'browse':
       case 'lastmodified':
       case 'tags':
@@ -798,6 +821,9 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
         // it came from a URI.
         $uri = rawurldecode("{$path}{$commit}");
         break;
+      case 'clone':
+        $uri = $this->getPathURI("/{$action}/");
+      break;
     }
 
     if ($action == 'rendering-ref') {
@@ -1601,8 +1627,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       return false;
     }
 
-    // TODO: Unprototype this feature.
-    if (!PhabricatorEnv::getEnvConfig('phabricator.show-prototypes')) {
+    if (!PhabricatorEnv::getEnvConfig('diffusion.allow-git-lfs')) {
       return false;
     }
 
@@ -1645,6 +1670,18 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
 
   public function shouldAllowDangerousChanges() {
     return (bool)$this->getDetail('allow-dangerous-changes');
+  }
+
+  public function canAllowEnormousChanges() {
+    if (!$this->isHosted()) {
+      return false;
+    }
+
+    return true;
+  }
+
+  public function shouldAllowEnormousChanges() {
+    return (bool)$this->getDetail('allow-enormous-changes');
   }
 
   public function writeStatusMessage(
@@ -1849,7 +1886,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
 
 
   /**
-   * Retrieve the sevice URI for the device hosting this repository.
+   * Retrieve the service URI for the device hosting this repository.
    *
    * See @{method:newConduitClient} for a general discussion of interacting
    * with repository services. This method provides lower-level resolution of
@@ -1928,8 +1965,29 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
           'Cluster hosts must correctly route their intracluster requests.'));
     }
 
+    if (count($results) > 1) {
+      if (!$this->supportsSynchronization()) {
+        throw new Exception(
+          pht(
+            'Repository "%s" is bound to multiple active repository hosts, '.
+            'but this repository does not support cluster synchronization. '.
+            'Declusterize this repository or move it to a service with only '.
+            'one host.',
+            $this->getDisplayName()));
+      }
+    }
+
     shuffle($results);
     return head($results);
+  }
+
+  public function supportsSynchronization() {
+    // TODO: For now, this is only supported for Git.
+    if (!$this->isGit()) {
+      return false;
+    }
+
+    return true;
   }
 
   public function getAlmanacServiceCacheKey() {
@@ -2082,7 +2140,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     if ($this->isGit()) {
       // $_ENV does not populate in CLI contexts if "E" is missing from
       // "variables_order" in PHP config. Currently, we do not require this
-      // to be configured. Since it may not be, explictitly bring expected Git
+      // to be configured. Since it may not be, explicitly bring expected Git
       // environmental variables into scope. This list is not exhaustive, but
       // only lists variables with a known impact on commit hook behavior.
 
@@ -2512,6 +2570,14 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
   }
 
 
+/* -(  PhabricatorDestructibleCodexInterface  )------------------------------ */
+
+
+  public function newDestructibleCodex() {
+    return new PhabricatorRepositoryDestructibleCodex();
+  }
+
+
 /* -(  PhabricatorSpacesInterface  )----------------------------------------- */
 
 
@@ -2570,6 +2636,21 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       id(new DiffusionRepositoryURIsSearchEngineAttachment())
         ->setAttachmentKey('uris'),
     );
+  }
+
+/* -(  PhabricatorFulltextInterface  )--------------------------------------- */
+
+
+  public function newFulltextEngine() {
+    return new PhabricatorRepositoryFulltextEngine();
+  }
+
+
+/* -(  PhabricatorFerretInterface  )----------------------------------------- */
+
+
+  public function newFerretEngine() {
+    return new PhabricatorRepositoryFerretEngine();
   }
 
 }

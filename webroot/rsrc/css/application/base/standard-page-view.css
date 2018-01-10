@@ -18,7 +18,7 @@
 }
 
 body.white-background {
-  background: #fff;
+  background: {$page.content};
 }
 
 .phabricator-standard-page-footer {
@@ -61,9 +61,10 @@ body.white-background {
 }
 
 .keyboard-focus-focus-reticle {
-  background: #ffffd3;
+  background: rgba(255, 255, 211, 0.15);
   position: absolute;
-  border: 1px solid #999900;
+  border: 1px solid {$yellow};
+  pointer-events: none;
 }
 
 a.handle-status-closed {
@@ -84,6 +85,10 @@ a.handle-status-closed:hover {
   color: {$orange};
 }
 
+.handle-availability-no-email .perfect-circle {
+  color: {$violet};
+}
+
 .handle-availability-disabled .perfect-circle {
   color: {$greytext};
 }
@@ -95,6 +100,11 @@ a.handle-status-closed:hover {
   color: white;
   text-align: center;
   font-size: {$smallerfontsize};
+}
+
+.phui-handle.phui-link-person {
+  /* Prevent linebreaks between user availability markers and usernames. */
+  white-space: nowrap;
 }
 
 .phui-handle .phui-icon-view {
@@ -165,4 +175,30 @@ a.handle-status-closed:hover {
 .jx-scrollbar-link {
   position: absolute;
   left: -50px;
+}
+
+.phabricator-standard-page-tabs {
+  padding: 0 32px;
+  margin-bottom: 32px;
+  background: {$page.content};
+  box-shadow: 0 0 3px 0 rgba(0,0,0,0.2);
+}
+
+.device .phabricator-standard-page-tabs {
+  margin-bottom: 20px;
+  padding: 0 12px;
+}
+
+.device-phone .phabricator-standard-page-tabs {
+  text-align: center;
+}
+
+.device-phone
+  .phabricator-standard-page-tabs.phui-list-view.phui-list-tabbar > li {
+    display: inline-block;
+    float: none;
+}
+
+.phabricator-standard-page-tabs.phui-list-tabbar .phui-list-item-href {
+  padding: 12px 24px;
 }

@@ -10,11 +10,11 @@ final class DifferentialRevisionFulltextEngine
     $revision = id(new DifferentialRevisionQuery())
       ->setViewer($this->getViewer())
       ->withPHIDs(array($object->getPHID()))
-      ->needReviewerStatus(true)
+      ->needReviewers(true)
       ->executeOne();
 
     // TODO: This isn't very clean, but custom fields currently rely on it.
-    $object->attachReviewerStatus($revision->getReviewerStatus());
+    $object->attachReviewers($revision->getReviewers());
 
     $document->setDocumentTitle($revision->getTitle());
 
@@ -34,10 +34,10 @@ final class DifferentialRevisionFulltextEngine
 
     // If a revision needs review, the owners are the reviewers. Otherwise, the
     // owner is the author (e.g., accepted, rejected, closed).
-    $status_review = ArcanistDifferentialRevisionStatus::NEEDS_REVIEW;
-    if ($revision->getStatus() == $status_review) {
-      $reviewers = $revision->getReviewerStatus();
-      $reviewers = mpull($reviewers, 'getReviewerPHID', 'getReviewerPHID');
+    if ($revision->isNeedsReview()) {
+      $reviewers = $revision->getReviewerPHIDs();
+      $reviewers = array_fuse($reviewers);
+
       if ($reviewers) {
         foreach ($reviewers as $phid) {
           $document->addRelationship(

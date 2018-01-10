@@ -42,15 +42,14 @@ final class DifferentialGetRevisionConduitAPIMethod
     $revision = id(new DifferentialRevisionQuery())
       ->withIDs(array($revision_id))
       ->setViewer($request->getUser())
-      ->needRelationships(true)
-      ->needReviewerStatus(true)
+      ->needReviewers(true)
       ->executeOne();
 
     if (!$revision) {
       throw new ConduitException('ERR_BAD_REVISION');
     }
 
-    $reviewer_phids = array_values($revision->getReviewers());
+    $reviewer_phids = $revision->getReviewerPHIDs();
 
     $diffs = id(new DifferentialDiffQuery())
       ->setViewer($request->getUser())
@@ -83,10 +82,8 @@ final class DifferentialGetRevisionConduitAPIMethod
       'authorPHID' => $revision->getAuthorPHID(),
       'uri' => PhabricatorEnv::getURI('/D'.$revision->getID()),
       'title' => $revision->getTitle(),
-      'status' => $revision->getStatus(),
-      'statusName'  =>
-        ArcanistDifferentialRevisionStatus::getNameForRevisionStatus(
-          $revision->getStatus()),
+      'status' => $revision->getLegacyRevisionStatus(),
+      'statusName'  => $revision->getStatusDisplayName(),
       'summary' => $revision->getSummary(),
       'testPlan' => $revision->getTestPlan(),
       'lineCount' => $revision->getLineCount(),

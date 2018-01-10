@@ -50,7 +50,6 @@ final class PHUIDiffGraphView extends Phobject {
 
       $thread_count = $pos;
       for ($n = 0; $n < $thread_count; $n++) {
-
         if (empty($threads[$n])) {
           $line .= ' ';
           continue;
@@ -60,7 +59,7 @@ final class PHUIDiffGraphView extends Phobject {
           if ($found) {
             $line .= ' ';
             $joins[] = $n;
-            unset($threads[$n]);
+            $threads[$n] = false;
           } else {
             $line .= 'o';
             $found = true;
@@ -114,6 +113,7 @@ final class PHUIDiffGraphView extends Phobject {
           if ($thread_commit == $parent) {
             $found = true;
             $splits[] = $idx;
+            break;
           }
         }
 
@@ -160,7 +160,7 @@ final class PHUIDiffGraphView extends Phobject {
 
             $terminated[$ii] = true;
 
-            // If this thread is joinining some other node here, we don't want
+            // If this thread is joining some other node here, we don't want
             // to terminate it.
             if (isset($graph[$key + 1])) {
               $joins = $graph[$key + 1]['join'];

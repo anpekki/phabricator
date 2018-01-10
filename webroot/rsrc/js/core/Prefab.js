@@ -101,7 +101,6 @@ JX.install('Prefab', {
 
       datasource.setSortHandler(
         JX.bind(datasource, JX.Prefab.sortHandler, config));
-      datasource.setFilterHandler(JX.Prefab.filterClosedResults);
       datasource.setTransformer(JX.Prefab.transformDatasourceResults);
 
       var typeahead = new JX.Typeahead(
@@ -185,7 +184,7 @@ JX.install('Prefab', {
       var self_hits = {};
 
       // We'll put matches where the user's input is a prefix of the name
-      // above mathches where that isn't true.
+      // above matches where that isn't true.
       var prefix_hits = {};
 
       var tokens = this.tokenize(value);
@@ -213,7 +212,7 @@ JX.install('Prefab', {
         }
 
         // If one result is open and one is closed, show the open result
-        // first. The "!" tricks here are becaused closed values are display
+        // first. The "!" tricks here are because closed values are display
         // strings, so the value is either `null` or some truthy string. If
         // we compare the values directly, we'll apply this rule to two
         // objects which are both closed but for different reasons, like
@@ -255,37 +254,6 @@ JX.install('Prefab', {
       });
     },
 
-
-    /**
-     * Filter callback for tokenizers and typeaheads which filters out closed
-     * or disabled objects unless they are the only options.
-     */
-    filterClosedResults: function(value, list) {
-      // Look for any open result.
-      var has_open = false;
-      var ii;
-      for (ii = 0; ii < list.length; ii++) {
-        if (!list[ii].closed) {
-          has_open = true;
-          break;
-        }
-      }
-
-      if (!has_open) {
-        // Everything is closed, so just use it as-is.
-        return list;
-      }
-
-      // Otherwise, only display the open results.
-      var results = [];
-      for (ii = 0; ii < list.length; ii++) {
-        if (!list[ii].closed) {
-          results.push(list[ii]);
-        }
-      }
-
-      return results;
-    },
 
     /**
      * Transform results from a wire format into a usable format in a standard

@@ -9,11 +9,19 @@ final class PhabricatorSubscriptionsUIEventListener
   }
 
   public function handleEvent(PhutilEvent $event) {
+    $object = $event->getValue('object');
+
     switch ($event->getType()) {
       case PhabricatorEventType::TYPE_UI_DIDRENDERACTIONS:
         $this->handleActionEvent($event);
         break;
       case PhabricatorEventType::TYPE_UI_WILLRENDERPROPERTIES:
+        // Hacky solution so that property list view on Diffusion
+        // commits shows build status, but not Projects, Subscriptions,
+        // or Tokens.
+        if ($object instanceof PhabricatorRepositoryCommit) {
+          return;
+        }
         $this->handlePropertyEvent($event);
         break;
     }
@@ -56,20 +64,24 @@ final class PhabricatorSubscriptionsUIEventListener
         $subscribed = isset($edges[$src_phid][$edge_type][$user_phid]);
       }
 
+      $can_interact = PhabricatorPolicyFilter::canInteract($user, $object);
+
       if ($subscribed) {
         $sub_action = id(new PhabricatorActionView())
           ->setWorkflow(true)
           ->setRenderAsForm(true)
           ->setHref('/subscriptions/delete/'.$object->getPHID().'/')
           ->setName(pht('Unsubscribe'))
-          ->setIcon('fa-minus-circle');
+          ->setIcon('fa-minus-circle')
+          ->setDisabled(!$can_interact);
       } else {
         $sub_action = id(new PhabricatorActionView())
           ->setWorkflow(true)
           ->setRenderAsForm(true)
           ->setHref('/subscriptions/add/'.$object->getPHID().'/')
           ->setName(pht('Subscribe'))
-          ->setIcon('fa-plus-circle');
+          ->setIcon('fa-plus-circle')
+          ->setDisabled(!$can_interact);
       }
 
       if (!$user->isLoggedIn()) {

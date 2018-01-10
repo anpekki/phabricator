@@ -9,11 +9,19 @@ final class PhabricatorTokenUIEventListener
   }
 
   public function handleEvent(PhutilEvent $event) {
+    $object = $event->getValue('object');
+
     switch ($event->getType()) {
       case PhabricatorEventType::TYPE_UI_DIDRENDERACTIONS:
         $this->handleActionEvent($event);
         break;
       case PhabricatorEventType::TYPE_UI_WILLRENDERPROPERTIES:
+        // Hacky solution so that property list view on Diffusion
+        // commits shows build status, but not Projects, Subscriptions,
+        // or Tokens.
+        if ($object instanceof PhabricatorRepositoryCommit) {
+          return;
+        }
         $this->handlePropertyEvent($event);
         break;
     }
@@ -37,6 +45,8 @@ final class PhabricatorTokenUIEventListener
       return null;
     }
 
+    $can_interact = PhabricatorPolicyFilter::canInteract($user, $object);
+
     $current = id(new PhabricatorTokenGivenQuery())
       ->setViewer($user)
       ->withAuthorPHIDs(array($user->getPHID()))
@@ -48,14 +58,17 @@ final class PhabricatorTokenUIEventListener
         ->setWorkflow(true)
         ->setHref('/token/give/'.$object->getPHID().'/')
         ->setName(pht('Award Token'))
-        ->setIcon('fa-trophy');
+        ->setIcon('fa-trophy')
+        ->setDisabled(!$can_interact);
     } else {
       $token_action = id(new PhabricatorActionView())
         ->setWorkflow(true)
         ->setHref('/token/give/'.$object->getPHID().'/')
         ->setName(pht('Rescind Token'))
-        ->setIcon('fa-trophy');
+        ->setIcon('fa-trophy')
+        ->setDisabled(!$can_interact);
     }
+
     if (!$user->isLoggedIn()) {
       $token_action->setDisabled(true);
     }

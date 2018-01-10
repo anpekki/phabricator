@@ -51,7 +51,7 @@ JX.behavior('lightbox-attachments', function (config) {
     e.kill();
 
     var mainFrame = JX.$('main-page-frame');
-    var links = JX.DOM.scry(mainFrame, 'a', 'lightboxable');
+    var links = JX.DOM.scry(mainFrame, '*', 'lightboxable');
     var phids = {};
     var data;
     for (var i = 0; i < links.length; i++) {
@@ -169,7 +169,7 @@ JX.behavior('lightbox-attachments', function (config) {
       );
 
     var commentIcon = new JX.PHUIXIconView()
-      .setIcon('fa-comments')
+      .setIcon('fa-comments phui-icon-circle-icon')
       .getNode();
     var commentButton =
       JX.$N('a',
@@ -181,7 +181,7 @@ JX.behavior('lightbox-attachments', function (config) {
         commentIcon
       );
     var closeIcon = new JX.PHUIXIconView()
-      .setIcon('fa-times')
+      .setIcon('fa-times phui-icon-circle-icon')
       .getNode();
     var closeButton =
       JX.$N('a',
@@ -371,9 +371,20 @@ JX.behavior('lightbox-attachments', function (config) {
     form.submit();
   };
 
+  var _startPageDownload = function(e) {
+    e.kill();
+    var form = e.getNode('tag:form');
+    form.submit();
+  };
+
   JX.Stratcom.listen(
     'click',
     'lightbox-download-submit',
     _startDownload);
+
+  JX.Stratcom.listen(
+    'click',
+    'embed-download-form',
+    _startPageDownload);
 
 });

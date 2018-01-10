@@ -31,7 +31,7 @@ final class ManiphestTaskSearchEngine
   }
 
   public function getResultTypeDescription() {
-    return pht('Tasks');
+    return pht('Maniphest Tasks');
   }
 
   public function getApplicationClassName() {
@@ -44,6 +44,11 @@ final class ManiphestTaskSearchEngine
   }
 
   protected function buildCustomSearchFields() {
+    // Hide the "Subtypes" constraint from the web UI if the install only
+    // defines one task subtype, since it isn't of any use in this case.
+    $subtype_map = id(new ManiphestTask())->newEditEngineSubtypeMap();
+    $hide_subtypes = (count($subtype_map) == 1);
+
     return array(
       id(new PhabricatorOwnersSearchField())
         ->setLabel(pht('Assigned To'))
@@ -73,9 +78,14 @@ final class ManiphestTaskSearchEngine
           pht('Search for tasks with given priorities.'))
         ->setConduitParameterType(new ConduitIntListParameterType())
         ->setDatasource(new ManiphestTaskPriorityDatasource()),
-      id(new PhabricatorSearchTextField())
-        ->setLabel(pht('Contains Words'))
-        ->setKey('fulltext'),
+      id(new PhabricatorSearchDatasourceField())
+        ->setLabel(pht('Subtypes'))
+        ->setKey('subtypes')
+        ->setAliases(array('subtype'))
+        ->setDescription(
+          pht('Search for tasks with given subtypes.'))
+        ->setDatasource(new ManiphestTaskSubtypeDatasource())
+        ->setIsHidden($hide_subtypes),
       id(new PhabricatorSearchThreeStateField())
         ->setLabel(pht('Open Parents'))
         ->setKey('hasParents')
@@ -130,7 +140,7 @@ final class ManiphestTaskSearchEngine
       'subscriberPHIDs',
       'statuses',
       'priorities',
-      'fulltext',
+      'subtypes',
       'hasParents',
       'hasSubtasks',
       'parentIDs',
@@ -178,6 +188,10 @@ final class ManiphestTaskSearchEngine
       $query->withPriorities($map['priorities']);
     }
 
+    if ($map['subtypes']) {
+      $query->withSubtypes($map['subtypes']);
+    }
+
     if ($map['createdStart']) {
       $query->withDateCreatedAfter($map['createdStart']);
     }
@@ -202,10 +216,6 @@ final class ManiphestTaskSearchEngine
       $query->withOpenSubtasks($map['hasSubtasks']);
     }
 
-    if (strlen($map['fulltext'])) {
-      $query->withFullTextSearch($map['fulltext']);
-    }
-
     if ($map['parentIDs']) {
       $query->withParentTaskIDs($map['parentIDs']);
     }
@@ -218,8 +228,6 @@ final class ManiphestTaskSearchEngine
     $group = idx($this->getGroupValues(), $group);
     if ($group) {
       $query->setGroupBy($group);
-    } else {
-      $query->setGroupBy(head($this->getGroupValues()));
     }
 
     if ($map['ids']) {

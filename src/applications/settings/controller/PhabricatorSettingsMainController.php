@@ -32,7 +32,7 @@ final class PhabricatorSettingsMainController
 
     // Redirect "/panel/XYZ/" to the viewer's personal settings panel. This
     // was the primary URI before global settings were introduced and allows
-    // generation of viewer-agnostic URIs for email.
+    // generation of viewer-agnostic URIs for email and logged-out users.
     $panel = $request->getURIData('panel');
     if ($panel) {
       $panel = phutil_escape_uri($panel);
@@ -112,10 +112,22 @@ final class PhabricatorSettingsMainController
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb($panel->getPanelName());
+    $crumbs->setBorder(true);
+
+    if ($this->user) {
+      $header_text = pht('Edit Settings (%s)', $user->getUserName());
+    } else {
+      $header_text = pht('Edit Global Settings');
+    }
+
+    $header = id(new PHUIHeaderView())
+      ->setHeader($header_text);
 
     $title = $panel->getPanelName();
 
     $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFixed(true)
       ->setNavigation($nav)
       ->setMainColumn($response);
 
@@ -193,7 +205,10 @@ final class PhabricatorSettingsMainController
       if ($panel->getPanelGroupKey() != $group_key) {
         $group_key = $panel->getPanelGroupKey();
         $group = $panel->getPanelGroup();
-        $nav->addLabel($group->getPanelGroupName());
+        $panel_name = $group->getPanelGroupName();
+        if ($panel_name) {
+          $nav->addLabel($panel_name);
+        }
       }
 
       $nav->addFilter($panel->getPanelKey(), $panel->getPanelName());

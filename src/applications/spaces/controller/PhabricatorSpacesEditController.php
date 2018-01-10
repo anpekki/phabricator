@@ -67,9 +67,12 @@ final class PhabricatorSpacesEditController
       $v_view = $request->getStr('viewPolicy');
       $v_edit = $request->getStr('editPolicy');
 
-      $type_name = PhabricatorSpacesNamespaceTransaction::TYPE_NAME;
-      $type_desc = PhabricatorSpacesNamespaceTransaction::TYPE_DESCRIPTION;
-      $type_default = PhabricatorSpacesNamespaceTransaction::TYPE_DEFAULT;
+      $type_name =
+        PhabricatorSpacesNamespaceNameTransaction::TRANSACTIONTYPE;
+      $type_desc =
+        PhabricatorSpacesNamespaceDescriptionTransaction::TRANSACTIONTYPE;
+      $type_default =
+        PhabricatorSpacesNamespaceDefaultTransaction::TRANSACTIONTYPE;
       $type_view = PhabricatorTransactions::TYPE_VIEW_POLICY;
       $type_edit = PhabricatorTransactions::TYPE_EDIT_POLICY;
 
@@ -162,8 +165,8 @@ final class PhabricatorSpacesEditController
           ->addCancelButton($cancel_uri));
 
     $box = id(new PHUIObjectBoxView())
-      ->setHeaderText(pht('Space'))
-      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+      ->setHeaderText($title)
+      ->setBackground(PHUIObjectBoxView::WHITE_CONFIG)
       ->setValidationException($validation_exception)
       ->appendChild($form);
 
@@ -176,12 +179,7 @@ final class PhabricatorSpacesEditController
     $crumbs->addTextCrumb($title);
     $crumbs->setBorder(true);
 
-    $header = id(new PHUIHeaderView())
-      ->setHeader($header_text)
-      ->setHeaderIcon('fa-pencil');
-
     $view = id(new PHUITwoColumnView())
-      ->setHeader($header)
       ->setFooter(array(
           $box,
         ));

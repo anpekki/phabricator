@@ -15,6 +15,7 @@ final class DiffusionCompareController extends DiffusionController {
     $viewer = $this->getViewer();
     $drequest = $this->getDiffusionRequest();
     $repository = $drequest->getRepository();
+    require_celerity_resource('diffusion-css');
 
     if (!$repository->supportsBranchComparison()) {
       return $this->newDialog()
@@ -92,6 +93,7 @@ final class DiffusionCompareController extends DiffusionController {
       array(
         'view' => 'compare',
       ));
+    $crumbs->setBorder(true);
 
     $pager = id(new PHUIPagerView())
       ->readFromRequest($request);
@@ -310,16 +312,12 @@ final class DiffusionCompareController extends DiffusionController {
     $header = id(new PHUIHeaderView())
       ->setHeader(pht('Commits'));
 
-    $object_box = id(new PHUIObjectBoxView())
+    return id(new PHUIObjectBoxView())
       ->setHeader($header)
       ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
-      ->setTable($history_table);
+      ->setTable($history_table)
+      ->addClass('diffusion-mobile-view')
+      ->setPager($pager);
 
-    $pager_box = $this->renderTablePagerBox($pager);
-
-    return array(
-      $object_box,
-      $pager_box,
-    );
   }
 }

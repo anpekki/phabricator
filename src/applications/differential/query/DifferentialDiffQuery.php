@@ -6,6 +6,9 @@ final class DifferentialDiffQuery
   private $ids;
   private $phids;
   private $revisionIDs;
+  private $revisionPHIDs;
+  private $commitPHIDs;
+  private $hasRevision;
 
   private $needChangesets = false;
   private $needProperties;
@@ -22,6 +25,21 @@ final class DifferentialDiffQuery
 
   public function withRevisionIDs(array $revision_ids) {
     $this->revisionIDs = $revision_ids;
+    return $this;
+  }
+
+  public function withRevisionPHIDs(array $revision_phids) {
+    $this->revisionPHIDs = $revision_phids;
+    return $this;
+  }
+
+  public function withCommitPHIDs(array $phids) {
+    $this->commitPHIDs = $phids;
+    return $this;
+  }
+
+  public function withHasRevision($has_revision) {
+    $this->hasRevision = $has_revision;
     return $this;
   }
 
@@ -108,25 +126,63 @@ final class DifferentialDiffQuery
   protected function buildWhereClauseParts(AphrontDatabaseConnection $conn) {
     $where = parent::buildWhereClauseParts($conn);
 
-    if ($this->ids) {
+    if ($this->ids !== null) {
       $where[] = qsprintf(
         $conn,
         'id IN (%Ld)',
         $this->ids);
     }
 
-    if ($this->phids) {
+    if ($this->phids !== null) {
       $where[] = qsprintf(
         $conn,
         'phid IN (%Ls)',
         $this->phids);
     }
 
-    if ($this->revisionIDs) {
+    if ($this->revisionIDs !== null) {
       $where[] = qsprintf(
         $conn,
         'revisionID IN (%Ld)',
         $this->revisionIDs);
+    }
+
+    if ($this->commitPHIDs !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'commitPHID IN (%Ls)',
+        $this->commitPHIDs);
+    }
+
+    if ($this->hasRevision !== null) {
+      if ($this->hasRevision) {
+        $where[] = qsprintf(
+          $conn,
+          'revisionID IS NOT NULL');
+      } else {
+        $where[] = qsprintf(
+          $conn,
+          'revisionID IS NULL');
+      }
+    }
+
+    if ($this->revisionPHIDs !== null) {
+      $viewer = $this->getViewer();
+
+      $revisions = id(new DifferentialRevisionQuery())
+        ->setViewer($viewer)
+        ->setParentQuery($this)
+        ->withPHIDs($this->revisionPHIDs)
+        ->execute();
+      $revision_ids = mpull($revisions, 'getID');
+      if (!$revision_ids) {
+        throw new PhabricatorEmptyQueryException();
+      }
+
+      $where[] = qsprintf(
+        $conn,
+        'revisionID IN (%Ls)',
+        $revision_ids);
     }
 
     return $where;

@@ -134,7 +134,7 @@ abstract class PhabricatorAuthController extends PhabricatorController {
     // checks later on to make sure this account is valid for the intended
     // operation. This requires edit permission for completeness and consistency
     // but it won't actually be meaningfully checked because we're using the
-    // ominpotent user.
+    // omnipotent user.
 
     $account = id(new PhabricatorExternalAccountQuery())
       ->setViewer(PhabricatorUser::getOmnipotentUser())
@@ -194,7 +194,7 @@ abstract class PhabricatorAuthController extends PhabricatorController {
     // hijacking registration sessions.
 
     $actual = $account->getProperty('registrationKey');
-    $expect = PhabricatorHash::digest($registration_key);
+    $expect = PhabricatorHash::weakDigest($registration_key);
     if (!phutil_hashes_are_identical($actual, $expect)) {
       $response = $this->renderError(
         pht(
@@ -259,8 +259,12 @@ abstract class PhabricatorAuthController extends PhabricatorController {
   protected function renderInviteHeader(PhabricatorAuthInvite $invite) {
     $viewer = $this->getViewer();
 
+    // Since the user hasn't registered yet, they may not be able to see other
+    // user accounts. Load the inviting user with the omnipotent viewer.
+    $omnipotent_viewer = PhabricatorUser::getOmnipotentUser();
+
     $invite_author = id(new PhabricatorPeopleQuery())
-      ->setViewer($viewer)
+      ->setViewer($omnipotent_viewer)
       ->withPHIDs(array($invite->getAuthorPHID()))
       ->needProfileImage(true)
       ->executeOne();

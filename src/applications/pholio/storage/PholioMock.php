@@ -12,7 +12,8 @@ final class PholioMock extends PholioDAO
     PhabricatorDestructibleInterface,
     PhabricatorSpacesInterface,
     PhabricatorMentionableInterface,
-    PhabricatorFulltextInterface {
+    PhabricatorFulltextInterface,
+    PhabricatorFerretInterface {
 
   const MARKUP_FIELD_DESCRIPTION  = 'markup:description';
 
@@ -217,8 +218,8 @@ final class PholioMock extends PholioDAO
 
 
   public function getMarkupFieldKey($field) {
-    $hash = PhabricatorHash::digest($this->getMarkupText($field));
-    return 'M:'.$hash;
+    $content = $this->getMarkupText($field);
+    return PhabricatorMarkupEngine::digestRemarkupContent($this, $content);
   }
 
   public function newMarkupEngine($field) {
@@ -317,6 +318,13 @@ final class PholioMock extends PholioDAO
 
   public function newFulltextEngine() {
     return new PholioMockFulltextEngine();
+  }
+
+
+/* -(  PhabricatorFerretInterface  )----------------------------------------- */
+
+  public function newFerretEngine() {
+    return new PholioMockFerretEngine();
   }
 
 

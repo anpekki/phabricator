@@ -652,7 +652,7 @@ final class DiffusionServeController extends DiffusionController {
     }
 
     $lfs_pass = $password->openEnvelope();
-    $lfs_hash = PhabricatorHash::digest($lfs_pass);
+    $lfs_hash = PhabricatorHash::weakDigest($lfs_pass);
 
     $token = id(new PhabricatorAuthTemporaryTokenQuery())
       ->setViewer(PhabricatorUser::getOmnipotentUser())
@@ -768,7 +768,10 @@ final class DiffusionServeController extends DiffusionController {
       $input = strlen($input)."\n".$input."0\n";
     }
 
-    $command = csprintf('%s serve --stdio', $bin);
+    $command = csprintf(
+      '%s -R %s serve --stdio',
+      $bin,
+      $repository->getLocalPath());
     $command = PhabricatorDaemon::sudoCommandAsDaemonUser($command);
 
     list($err, $stdout, $stderr) = id(new ExecFuture('%C', $command))

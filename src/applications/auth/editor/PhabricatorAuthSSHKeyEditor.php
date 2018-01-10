@@ -197,9 +197,7 @@ final class PhabricatorAuthSSHKeyEditor
 
     // After making any change to an SSH key, drop the authfile cache so it
     // is regenerated the next time anyone authenticates.
-    $cache = PhabricatorCaches::getMutableCache();
-    $authfile_key = PhabricatorAuthSSHKeyQuery::AUTHFILE_CACHEKEY;
-    $cache->deleteKey($authfile_key);
+    PhabricatorAuthSSHKeyQuery::deleteSSHKeyCache();
 
     return $xactions;
   }
@@ -228,7 +226,7 @@ final class PhabricatorAuthSSHKeyEditor
       ->addHeader('Thread-Topic', $phid);
 
     // The primary value of this mail is alerting users to account compromises,
-    // so force delivery. In particular, this mail should still be delievered
+    // so force delivery. In particular, this mail should still be delivered
     // even if "self mail" is disabled.
     $mail->setForceDelivery(true);
 

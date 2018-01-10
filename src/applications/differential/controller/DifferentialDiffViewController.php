@@ -23,6 +23,20 @@ final class DifferentialDiffViewController extends DifferentialController {
         ->setURI('/D'.$diff->getRevisionID().'?id='.$diff->getID());
     }
 
+    if ($request->isFormPost()) {
+      $diff_id = $diff->getID();
+      $revision_id = $request->getInt('revisionID');
+      if ($revision_id) {
+        $attach_uri = "/revision/attach/{$diff_id}/to/{$revision_id}/";
+      } else {
+        $attach_uri = "/revision/attach/{$diff_id}/to/";
+      }
+      $attach_uri = $this->getApplicationURI($attach_uri);
+
+      return id(new AphrontRedirectResponse())
+        ->setURI($attach_uri);
+    }
+
     $diff_phid = $diff->getPHID();
     $buildables = id(new HarbormasterBuildableQuery())
       ->setViewer($viewer)
@@ -78,13 +92,7 @@ final class DifferentialDiffViewController extends DifferentialController {
       $select);
 
     $form = id(new AphrontFormView())
-      ->setUser($request->getUser())
-      ->setAction('/differential/revision/edit/')
-      ->addHiddenInput('diffID', $diff->getID())
-      ->addHiddenInput('viaDiffView', 1)
-      ->addHiddenInput(
-        id(new DifferentialRepositoryField())->getFieldKey(),
-        $diff->getRepositoryPHID())
+      ->setViewer($viewer)
       ->appendRemarkupInstructions(
         pht(
           'Review the diff for correctness. When you are satisfied, either '.
@@ -98,7 +106,7 @@ final class DifferentialDiffViewController extends DifferentialController {
         ->setValue(pht('Continue')));
 
     $props = id(new DifferentialDiffProperty())->loadAllWhere(
-    'diffID = %d',
+      'diffID = %d',
       $diff->getID());
     $props = mpull($props, 'getData', 'getName');
 
@@ -109,6 +117,8 @@ final class DifferentialDiffViewController extends DifferentialController {
 
     $changesets = $diff->loadChangesets();
     $changesets = msort($changesets, 'getSortKey');
+
+    $this->buildPackageMaps($changesets);
 
     $table_of_contents = $this->buildTableOfContents(
       $changesets,
@@ -169,7 +179,7 @@ final class DifferentialDiffViewController extends DifferentialController {
     $revisions = id(new DifferentialRevisionQuery())
       ->setViewer($viewer)
       ->withAuthors(array($viewer->getPHID()))
-      ->withStatus(DifferentialRevisionQuery::STATUS_OPEN)
+      ->withIsOpen(true)
       ->requireCapabilities(
         array(
           PhabricatorPolicyCapability::CAN_VIEW,

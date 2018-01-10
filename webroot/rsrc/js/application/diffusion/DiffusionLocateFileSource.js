@@ -23,6 +23,11 @@ JX.install('DiffusionLocateFileSource', {
 
     ondata: function(results) {
       this.tree = results.tree;
+
+      if (this.lastValue !== null) {
+        this.matchResults(this.lastValue);
+      }
+
       this.setReady(true);
     },
 
@@ -255,7 +260,7 @@ JX.install('DiffusionLocateFileSource', {
 
     /**
      * Score a matching string by finding the longest prefix of the search
-     * query it contains continguously.
+     * query it contains contiguously.
      */
     scoreMatch: function(haystack, haypos, search) {
       var pos = 0;

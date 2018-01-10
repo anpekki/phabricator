@@ -26,7 +26,7 @@ final class DifferentialDoorkeeperRevisionFeedStoryPublisher
     return id(new DifferentialRevisionQuery())
       ->setViewer($this->getViewer())
       ->withIDs(array($object->getID()))
-      ->needRelationships(true)
+      ->needReviewers(true)
       ->executeOne();
   }
 
@@ -35,25 +35,24 @@ final class DifferentialDoorkeeperRevisionFeedStoryPublisher
   }
 
   public function getActiveUserPHIDs($object) {
-    $status = $object->getStatus();
-    if ($status == ArcanistDifferentialRevisionStatus::NEEDS_REVIEW) {
-      return $object->getReviewers();
+    if ($object->isNeedsReview()) {
+      return $object->getReviewerPHIDs();
     } else {
       return array();
     }
   }
 
   public function getPassiveUserPHIDs($object) {
-    $status = $object->getStatus();
-    if ($status == ArcanistDifferentialRevisionStatus::NEEDS_REVIEW) {
+    if ($object->isNeedsReview()) {
       return array();
     } else {
-      return $object->getReviewers();
+      return $object->getReviewerPHIDs();
     }
   }
 
   public function getCCUserPHIDs($object) {
-    return $object->getCCPHIDs();
+    return PhabricatorSubscribersQuery::loadSubscribersForPHID(
+      $object->getPHID());
   }
 
   public function getObjectTitle($object) {

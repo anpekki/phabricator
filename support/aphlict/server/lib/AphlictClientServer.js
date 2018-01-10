@@ -16,10 +16,12 @@ JX.install('AphlictClientServer', {
 
     this._server = server;
     this._lists = {};
+    this._adminServers = [];
   },
 
   properties: {
     logger: null,
+    adminServers: null
   },
 
   members: {
@@ -31,6 +33,20 @@ JX.install('AphlictClientServer', {
         this._lists[instance] = new JX.AphlictListenerList(instance);
       }
       return this._lists[instance];
+    },
+
+    getHistory: function(age) {
+      var results = [];
+
+      var servers = this.getAdminServers();
+      for (var ii = 0; ii < servers.length; ii++) {
+        var messages = servers[ii].getHistory(age);
+        for (var jj = 0; jj < messages.length; jj++) {
+          results.push(messages[jj]);
+        }
+      }
+
+      return results;
     },
 
     log: function() {
@@ -76,8 +92,14 @@ JX.install('AphlictClientServer', {
       var server = this._server.listen.apply(this._server, arguments);
       var wss = new WebSocket.Server({server: server});
 
-      wss.on('connection', function(ws) {
-        var path = url.parse(ws.upgradeReq.url).pathname;
+      // This function checks for upgradeReq which is only available in
+      // ws2 by default, not ws3. See T12755 for more information.
+      wss.on('connection', function(ws, request) {
+        if ('upgradeReq' in ws) {
+          request = ws.upgradeReq;
+        }
+
+        var path = url.parse(request.url).pathname;
         var instance = self._parseInstanceFromPath(path);
 
         var listener = self.getListenerList(instance).addListener(ws);
@@ -115,6 +137,38 @@ JX.install('AphlictClientServer', {
                 'Unsubscribed from: %s',
                 JSON.stringify(message.data));
               listener.unsubscribe(message.data);
+              break;
+
+            case 'replay':
+              var age = message.data.age || 60000;
+              var min_age = (new Date().getTime() - age);
+
+              var old_messages = self.getHistory(min_age);
+              for (var ii = 0; ii < old_messages.length; ii++) {
+                var old_message = old_messages[ii];
+
+                if (!listener.isSubscribedToAny(old_message.subscribers)) {
+                  continue;
+                }
+
+                try {
+                  listener.writeMessage(old_message);
+                } catch (error) {
+                  break;
+                }
+              }
+              break;
+
+            case 'ping':
+              var pong = {
+                type: 'pong'
+              };
+
+              try {
+                listener.writeMessage(pong);
+              } catch (error) {
+                // Ignore any issues here, we'll clean up elsewhere.
+              }
               break;
 
             default:

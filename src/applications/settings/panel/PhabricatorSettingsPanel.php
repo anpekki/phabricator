@@ -143,7 +143,7 @@ abstract class PhabricatorSettingsPanel extends Phobject {
   /**
    * Return false to prevent this panel from being displayed or used. You can
    * do, e.g., configuration checks here, to determine if the feature your
-   * panel controls is unavailble in this install. By default, all panels are
+   * panel controls is unavailable in this install. By default, all panels are
    * enabled.
    *
    * @return bool True if the panel should be shown.
@@ -229,8 +229,15 @@ abstract class PhabricatorSettingsPanel extends Phobject {
 
     $user = $this->getUser();
     if ($user) {
-      $username = $user->getUsername();
-      return "/settings/user/{$username}/page/{$key}/{$path}";
+      if ($user->isLoggedIn()) {
+        $username = $user->getUsername();
+        return "/settings/user/{$username}/page/{$key}/{$path}";
+      } else {
+        // For logged-out users, we can't put their username in the URI. This
+        // page will prompt them to login, then redirect them to the correct
+        // location.
+        return "/settings/panel/{$key}/";
+      }
     } else {
       $builtin = $this->getPreferences()->getBuiltinKey();
       return "/settings/builtin/{$builtin}/page/{$key}/{$path}";
@@ -272,6 +279,23 @@ abstract class PhabricatorSettingsPanel extends Phobject {
     $xactions = array();
     $xactions[] = $preferences->newTransaction($key, $value);
     $editor->applyTransactions($preferences, $xactions);
+  }
+
+
+  public function newBox($title, $content, $actions = array()) {
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title);
+
+    foreach ($actions as $action) {
+      $header->addActionLink($action);
+    }
+
+    $view = id(new PHUIObjectBoxView())
+      ->setHeader($header)
+      ->appendChild($content)
+      ->setBackground(PHUIObjectBoxView::WHITE_CONFIG);
+
+    return $view;
   }
 
 }

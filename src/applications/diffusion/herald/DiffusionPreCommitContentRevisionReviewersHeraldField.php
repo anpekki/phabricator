@@ -20,15 +20,15 @@ final class DiffusionPreCommitContentRevisionReviewersHeraldField
       return array();
     }
 
-    return $revision->getReviewers();
-  }
+    return $revision->getReviewerPHIDs();
+   }
 
   protected function getHeraldFieldStandardType() {
     return self::STANDARD_PHID_LIST;
   }
 
   protected function getDatasource() {
-    return new PhabricatorProjectOrUserDatasource();
+    return new DifferentialReviewerDatasource();
   }
 
 }

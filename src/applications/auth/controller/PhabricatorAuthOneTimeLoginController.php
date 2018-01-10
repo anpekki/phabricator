@@ -68,7 +68,7 @@ final class PhabricatorAuthOneTimeLoginController
 
     if (!$token) {
       return $this->newDialog()
-        ->setTitle(pht('Unable to Login'))
+        ->setTitle(pht('Unable to Log In'))
         ->setShortTitle(pht('Login Failure'))
         ->appendParagraph(
           pht(
@@ -135,12 +135,11 @@ final class PhabricatorAuthOneTimeLoginController
             ->setTokenResource($target_user->getPHID())
             ->setTokenType($password_type)
             ->setTokenExpires(time() + phutil_units('1 hour in seconds'))
-            ->setTokenCode(PhabricatorHash::digest($key))
+            ->setTokenCode(PhabricatorHash::weakDigest($key))
             ->save();
         unset($unguarded);
 
-        $username = $target_user->getUsername();
-        $panel_uri = "/settings/user/{$username}/page/password/";
+        $panel_uri = '/auth/password/';
 
         $next = (string)id(new PhutilURI($panel_uri))
           ->setQueryParams(
@@ -170,7 +169,7 @@ final class PhabricatorAuthOneTimeLoginController
       case PhabricatorAuthSessionEngine::ONETIME_USERNAME:
       case PhabricatorAuthSessionEngine::ONETIME_RESET:
       default:
-        $title = pht('Login to Phabricator');
+        $title = pht('Log in to Phabricator');
         break;
     }
 
@@ -193,7 +192,7 @@ final class PhabricatorAuthOneTimeLoginController
 
     $dialog = $this->newDialog()
       ->setTitle($title)
-      ->addSubmitButton(pht('Login (%s)', $target_user->getUsername()))
+      ->addSubmitButton(pht('Log In (%s)', $target_user->getUsername()))
       ->addCancelButton('/');
 
     foreach ($body as $paragraph) {

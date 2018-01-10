@@ -178,7 +178,10 @@ final class DiffusionLowLevelResolveRefsQuery
       // repositories with a huge number of tags.
       $tag_refs = id(new DiffusionLowLevelGitRefQuery())
         ->setRepository($repository)
-        ->withIsTag(true)
+        ->withRefTypes(
+          array(
+            PhabricatorRepositoryRefCursor::TYPE_TAG,
+          ))
         ->executeQuery();
       foreach ($tag_refs as $tag_ref) {
         $tag_map[$tag_ref->getShortName()] = $tag_ref->getCommitIdentifier();
@@ -253,6 +256,66 @@ final class DiffusionLowLevelResolveRefsQuery
       return $results;
     }
 
+    // If some of the refs look like hashes, try to bulk resolve them. This
+    // workflow happens via RefEngine and bulk resolution is dramatically
+    // faster than individual resolution. See PHI158.
+
+    $hashlike = array();
+    foreach ($unresolved as $key => $ref) {
+      if (preg_match('/^[a-f0-9]{40}\z/', $ref)) {
+        $hashlike[$key] = $ref;
+      }
+    }
+
+    if (count($hashlike) > 1) {
+      $hashlike_map = array();
+
+      $hashlike_groups = array_chunk($hashlike, 64, true);
+      foreach ($hashlike_groups as $hashlike_group) {
+        $hashlike_arg = array();
+        foreach ($hashlike_group as $hashlike_ref) {
+          $hashlike_arg[] = hgsprintf('%s', $hashlike_ref);
+        }
+        $hashlike_arg = '('.implode(' or ', $hashlike_arg).')';
+
+        list($err, $refs) = $repository->execLocalCommand(
+          'log --template=%s --rev %s',
+          '{node}\n',
+          $hashlike_arg);
+        if ($err) {
+          // NOTE: If any ref fails to resolve, Mercurial will exit with an
+          // error. We just give up on the whole group and resolve it
+          // individually below. In theory, we could split it into subgroups
+          // but the pathway where this bulk resolution matters rarely tries
+          // to resolve missing refs (see PHI158).
+          continue;
+        }
+
+        $refs = phutil_split_lines($refs, false);
+
+        foreach ($refs as $ref) {
+          $hashlike_map[$ref] = true;
+        }
+      }
+
+      foreach ($unresolved as $key => $ref) {
+        if (!isset($hashlike_map[$ref])) {
+          continue;
+        }
+
+        $results[$ref][] = array(
+          'type' => 'commit',
+          'identifier' => $ref,
+        );
+
+        unset($unresolved[$key]);
+      }
+    }
+
+    if (!$unresolved) {
+      return $results;
+    }
+
     // If we still have unresolved refs (which might be things like "tip"),
     // try to resolve them individually.
 
@@ -268,13 +331,13 @@ final class DiffusionLowLevelResolveRefsQuery
       try {
         list($stdout) = $future->resolvex();
       } catch (CommandException $ex) {
-        if (preg_match('/ambiguous identifier/', $ex->getStdErr())) {
+        if (preg_match('/ambiguous identifier/', $ex->getStderr())) {
           // This indicates that the ref ambiguously matched several things.
           // Eventually, it would be nice to return all of them, but it is
           // unclear how to best do that. For now, treat it as a miss instead.
           continue;
         }
-        if (preg_match('/unknown revision/', $ex->getStdErr())) {
+        if (preg_match('/unknown revision/', $ex->getStderr())) {
           // No matches for this ref.
           continue;
         }

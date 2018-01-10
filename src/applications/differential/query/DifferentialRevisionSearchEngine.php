@@ -19,8 +19,7 @@ final class DifferentialRevisionSearchEngine
     return id(new DifferentialRevisionQuery())
       ->needFlags(true)
       ->needDrafts(true)
-      ->needRelationships(true)
-      ->needReviewerStatus(true);
+      ->needReviewers(true);
   }
 
   protected function buildQueryFromParameters(array $map) {
@@ -42,8 +41,8 @@ final class DifferentialRevisionSearchEngine
       $query->withRepositoryPHIDs($map['repositoryPHIDs']);
     }
 
-    if ($map['status']) {
-      $query->withStatus($map['status']);
+    if ($map['statuses']) {
+      $query->withStatuses($map['statuses']);
     }
 
     return $query;
@@ -75,13 +74,14 @@ final class DifferentialRevisionSearchEngine
         ->setLabel(pht('Repositories'))
         ->setKey('repositoryPHIDs')
         ->setAliases(array('repository', 'repositories', 'repositoryPHID'))
-        ->setDatasource(new DifferentialRepositoryDatasource())
+        ->setDatasource(new DiffusionRepositoryFunctionDatasource())
         ->setDescription(
           pht('Find revisions from specific repositories.')),
-      id(new PhabricatorSearchSelectField())
-        ->setLabel(pht('Status'))
-        ->setKey('status')
-        ->setOptions($this->getStatusOptions())
+      id(new PhabricatorSearchDatasourceField())
+        ->setLabel(pht('Statuses'))
+        ->setKey('statuses')
+        ->setAliases(array('status'))
+        ->setDatasource(new DifferentialRevisionStatusFunctionDatasource())
         ->setDescription(
           pht('Find revisions with particular statuses.')),
     );
@@ -116,7 +116,7 @@ final class DifferentialRevisionSearchEngine
 
         return $query
           ->setParameter('responsiblePHIDs', array($viewer->getPHID()))
-          ->setParameter('status', DifferentialRevisionQuery::STATUS_OPEN)
+          ->setParameter('statuses', array('open()'))
           ->setParameter('bucket', $bucket_key);
       case 'authored':
         return $query
@@ -130,13 +130,13 @@ final class DifferentialRevisionSearchEngine
 
   private function getStatusOptions() {
     return array(
-      DifferentialRevisionQuery::STATUS_ANY            => pht('All'),
-      DifferentialRevisionQuery::STATUS_OPEN           => pht('Open'),
-      DifferentialRevisionQuery::STATUS_ACCEPTED       => pht('Accepted'),
-      DifferentialRevisionQuery::STATUS_NEEDS_REVIEW   => pht('Needs Review'),
-      DifferentialRevisionQuery::STATUS_NEEDS_REVISION => pht('Needs Revision'),
-      DifferentialRevisionQuery::STATUS_CLOSED         => pht('Closed'),
-      DifferentialRevisionQuery::STATUS_ABANDONED      => pht('Abandoned'),
+      DifferentialLegacyQuery::STATUS_ANY            => pht('All'),
+      DifferentialLegacyQuery::STATUS_OPEN           => pht('Open'),
+      DifferentialLegacyQuery::STATUS_ACCEPTED       => pht('Accepted'),
+      DifferentialLegacyQuery::STATUS_NEEDS_REVIEW   => pht('Needs Review'),
+      DifferentialLegacyQuery::STATUS_NEEDS_REVISION => pht('Needs Revision'),
+      DifferentialLegacyQuery::STATUS_CLOSED         => pht('Closed'),
+      DifferentialLegacyQuery::STATUS_ABANDONED      => pht('Abandoned'),
     );
   }
 
@@ -163,10 +163,13 @@ final class DifferentialRevisionSearchEngine
         $groups = $bucket->newResultGroups($query, $revisions);
 
         foreach ($groups as $group) {
-          $views[] = id(clone $template)
-            ->setHeader($group->getName())
-            ->setNoDataString($group->getNoDataString())
-            ->setRevisions($group->getObjects());
+          // Don't show groups in Dashboard Panels
+          if ($group->getObjects() || !$this->isPanelContext()) {
+            $views[] = id(clone $template)
+              ->setHeader($group->getName())
+              ->setNoDataString($group->getNoDataString())
+              ->setRevisions($group->getObjects());
+          }
         }
       } catch (Exception $ex) {
         $this->addError($ex->getMessage());
@@ -175,6 +178,12 @@ final class DifferentialRevisionSearchEngine
       $views[] = id(clone $template)
         ->setRevisions($revisions)
         ->setHandles(array());
+    }
+
+    if (!$views) {
+      $views[] = id(new DifferentialRevisionListView())
+        ->setUser($viewer)
+        ->setNoDataString(pht('No revisions found.'));
     }
 
     $phids = array_mergev(mpull($views, 'getRequiredHandlePHIDs'));
@@ -227,11 +236,9 @@ final class DifferentialRevisionSearchEngine
   }
 
   private function loadUnlandedDependencies(array $revisions) {
-    $status_accepted = ArcanistDifferentialRevisionStatus::ACCEPTED;
-
     $phids = array();
     foreach ($revisions as $revision) {
-      if ($revision->getStatus() != $status_accepted) {
+      if (!$revision->isAccepted()) {
         continue;
       }
 
@@ -261,7 +268,7 @@ final class DifferentialRevisionSearchEngine
     $blocking_revisions = id(new DifferentialRevisionQuery())
       ->setViewer($viewer)
       ->withPHIDs($revision_phids)
-      ->withStatus(DifferentialRevisionQuery::STATUS_OPEN)
+      ->withIsOpen(true)
       ->execute();
     $blocking_revisions = mpull($blocking_revisions, null, 'getPHID');
 

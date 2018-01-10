@@ -139,7 +139,7 @@ abstract class PhabricatorApplicationSearchEngine extends Phobject {
    * Executes the saved query.
    *
    * @param PhabricatorSavedQuery The saved query to operate on.
-   * @return The result of the query.
+   * @return PhabricatorQuery The result of the query.
    */
   public function buildQueryFromSavedQuery(PhabricatorSavedQuery $original) {
     $saved = clone $original;
@@ -324,6 +324,9 @@ abstract class PhabricatorApplicationSearchEngine extends Phobject {
 
     $result = $head + $body + $tail;
 
+    // Force the fulltext "query" field to the top unconditionally.
+    $result = array_select_keys($result, array('query')) + $result;
+
     foreach ($this->getHiddenFields() as $hidden_key) {
       unset($result[$hidden_key]);
     }
@@ -356,7 +359,7 @@ abstract class PhabricatorApplicationSearchEngine extends Phobject {
    *   );
    *
    * Any unspecified fields (including custom fields and fields added
-   * automatically by infrastruture) will be put in the middle.
+   * automatically by infrastructure) will be put in the middle.
    *
    * @return list<string> Default ordering for field keys.
    */
@@ -469,13 +472,17 @@ abstract class PhabricatorApplicationSearchEngine extends Phobject {
 
   public function loadAllNamedQueries() {
     $viewer = $this->requireViewer();
-    $builtin = $this->getBuiltinQueries($viewer);
+    $builtin = $this->getBuiltinQueries();
 
     if ($this->namedQueries === null) {
       $named_queries = id(new PhabricatorNamedQueryQuery())
         ->setViewer($viewer)
-        ->withUserPHIDs(array($viewer->getPHID()))
         ->withEngineClassNames(array(get_class($this)))
+        ->withUserPHIDs(
+          array(
+            $viewer->getPHID(),
+            PhabricatorNamedQuery::SCOPE_GLOBAL,
+          ))
         ->execute();
       $named_queries = mpull($named_queries, null, 'getQueryKey');
 
@@ -494,7 +501,7 @@ abstract class PhabricatorApplicationSearchEngine extends Phobject {
         unset($builtin[$key]);
       }
 
-      $named_queries = msort($named_queries, 'getSortKey');
+      $named_queries = msortv($named_queries, 'getNamedQuerySortVector');
       $this->namedQueries = $named_queries;
     }
 
@@ -509,6 +516,34 @@ abstract class PhabricatorApplicationSearchEngine extends Phobject {
       }
     }
     return $named_queries;
+  }
+
+  public function getDefaultQueryKey() {
+    $viewer = $this->requireViewer();
+
+    $configs = id(new PhabricatorNamedQueryConfigQuery())
+      ->setViewer($viewer)
+      ->withEngineClassNames(array(get_class($this)))
+      ->withScopePHIDs(
+        array(
+          $viewer->getPHID(),
+          PhabricatorNamedQueryConfig::SCOPE_GLOBAL,
+        ))
+      ->execute();
+    $configs = msortv($configs, 'getStrengthSortVector');
+
+    $key_pinned = PhabricatorNamedQueryConfig::PROPERTY_PINNED;
+    $map = $this->loadEnabledNamedQueries();
+    foreach ($configs as $config) {
+      $pinned = $config->getConfigProperty($key_pinned);
+      if (!isset($map[$pinned])) {
+        continue;
+      }
+
+      return $pinned;
+    }
+
+    return head_key($map);
   }
 
   protected function setQueryProjects(
@@ -603,7 +638,7 @@ abstract class PhabricatorApplicationSearchEngine extends Phobject {
     $sequence = 0;
     foreach ($names as $key => $name) {
       $queries[$key] = id(new PhabricatorNamedQuery())
-        ->setUserPHID($this->requireViewer()->getPHID())
+        ->setUserPHID(PhabricatorNamedQuery::SCOPE_GLOBAL)
         ->setEngineClassName(get_class($this))
         ->setQueryName($name)
         ->setQueryKey($key)
@@ -908,7 +943,7 @@ abstract class PhabricatorApplicationSearchEngine extends Phobject {
     return array();
   }
 
-  protected function getResultBucket(PhabricatorSavedQuery $saved) {
+  public function getResultBucket(PhabricatorSavedQuery $saved) {
     $key = $saved->getParameter('bucket');
     if ($key == self::BUCKET_NONE) {
       return null;
@@ -978,7 +1013,13 @@ abstract class PhabricatorApplicationSearchEngine extends Phobject {
       $objects = $query->executeWithCursorPager($pager);
     }
 
+    $this->didExecuteQuery($query);
+
     return $objects;
+  }
+
+  protected function didExecuteQuery(PhabricatorPolicyAwareQuery $query) {
+    return;
   }
 
 

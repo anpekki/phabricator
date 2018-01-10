@@ -9,34 +9,33 @@ final class PhabricatorConfigClusterNotificationsController
 
     $title = pht('Cluster Notifications');
     $doc_href = PhabricatorEnv::getDoclink('Cluster: Notifications');
+    $button = id(new PHUIButtonView())
+      ->setIcon('fa-book')
+      ->setHref($doc_href)
+      ->setTag('a')
+      ->setText(pht('Documentation'));
 
-    $header = id(new PHUIHeaderView())
-      ->setHeader($title)
-      ->setProfileHeader(true)
-      ->addActionLink(
-        id(new PHUIButtonView())
-          ->setIcon('fa-book')
-          ->setHref($doc_href)
-          ->setTag('a')
-          ->setText(pht('Documentation')));
+    $header = $this->buildHeaderView($title, $button);
 
-    $crumbs = $this
-      ->buildApplicationCrumbs($nav)
+    $notification_status = $this->buildClusterNotificationStatus();
+    $status = $this->buildConfigBoxView(
+      pht('Notifications Status'),
+      $notification_status);
+
+    $crumbs = $this->buildApplicationCrumbs()
       ->addTextCrumb($title)
       ->setBorder(true);
 
-    $notification_status = $this->buildClusterNotificationStatus();
-
-    $content = id(new PhabricatorConfigPageView())
+    $content = id(new PHUITwoColumnView())
       ->setHeader($header)
-      ->setContent($notification_status);
+      ->setNavigation($nav)
+      ->setFixed(true)
+      ->setMainColumn($status);
 
     return $this->newPage()
       ->setTitle($title)
       ->setCrumbs($crumbs)
-      ->setNavigation($nav)
-      ->appendChild($content)
-      ->addClass('white-background');
+      ->appendChild($content);
   }
 
   private function buildClusterNotificationStatus() {
@@ -103,10 +102,20 @@ final class PhabricatorConfigClusterNotificationsController
           new PhutilNumber(idx($details, 'messages.in')),
           new PhutilNumber(idx($details, 'messages.out')));
 
+        if (idx($details, 'history.size')) {
+          $history = pht(
+            '%s Held / %sms',
+            new PhutilNumber(idx($details, 'history.size')),
+            new PhutilNumber(idx($details, 'history.age')));
+        } else {
+          $history = pht('No Messages');
+        }
+
       } else {
         $uptime = null;
         $clients = null;
         $stats = null;
+        $history = null;
       }
 
       $status_view = array(
@@ -126,6 +135,7 @@ final class PhabricatorConfigClusterNotificationsController
         $uptime,
         $clients,
         $stats,
+        $history,
         $messages,
       );
     }
@@ -143,10 +153,12 @@ final class PhabricatorConfigClusterNotificationsController
           pht('Uptime'),
           pht('Clients'),
           pht('Messages'),
+          pht('History'),
           null,
         ))
       ->setColumnClasses(
         array(
+          null,
           null,
           null,
           null,

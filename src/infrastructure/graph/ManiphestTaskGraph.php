@@ -27,6 +27,8 @@ final class ManiphestTaskGraph
   protected function newTableRow($phid, $object, $trace) {
     $viewer = $this->getViewer();
 
+    Javelin::initBehavior('phui-hovercards');
+
     if ($object) {
       $status = $object->getStatus();
       $priority = $object->getPriority();
@@ -51,19 +53,16 @@ final class ManiphestTaskGraph
         $assigned = phutil_tag('em', array(), pht('None'));
       }
 
-      $full_title = $object->getTitle();
-
-      $title = id(new PhutilUTF8StringTruncator())
-        ->setMaximumGlyphs(80)
-        ->truncateString($full_title);
-
-      $link = phutil_tag(
+      $link = javelin_tag(
         'a',
         array(
           'href' => $object->getURI(),
-          'title' => $full_title,
+          'sigil' => 'hovercard',
+          'meta' => array(
+            'hoverPHID' => $object->getPHID(),
+          ),
         ),
-        $title);
+        $object->getTitle());
 
       $link = array(
         phutil_tag(

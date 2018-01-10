@@ -10,6 +10,10 @@ final class PhabricatorFileDataController extends PhabricatorFileController {
     return false;
   }
 
+  public function shouldAllowPartialSessions() {
+    return true;
+  }
+
   public function handleRequest(AphrontRequest $request) {
     $viewer = $request->getViewer();
     $this->phid = $request->getURIData('phid');
@@ -62,17 +66,8 @@ final class PhabricatorFileDataController extends PhabricatorFileController {
     // an initial request for bytes 0-1 of the audio file, and things go south
     // if we can't respond with a 206 Partial Content.
     $range = $request->getHTTPHeader('range');
-    if ($range) {
-      $matches = null;
-      if (preg_match('/^bytes=(\d+)-(\d+)$/', $range, $matches)) {
-        // Note that the "Range" header specifies bytes differently than
-        // we do internally: the range 0-1 has 2 bytes (byte 0 and byte 1).
-        $begin = (int)$matches[1];
-        $end = (int)$matches[2] + 1;
-
-        $response->setHTTPResponseCode(206);
-        $response->setRange($begin, ($end - 1));
-      }
+    if (strlen($range)) {
+      list($begin, $end) = $response->parseHTTPRange($range);
     }
 
     $is_viewable = $file->isViewableInBrowser();
@@ -84,18 +79,28 @@ final class PhabricatorFileDataController extends PhabricatorFileController {
     if ($is_viewable && !$force_download) {
       $response->setMimeType($file->getViewableMimeType());
     } else {
-      if (!$request->isHTTPPost() && !$is_alternate_domain && !$is_lfs) {
-        // NOTE: Require POST to download files from the primary domain. We'd
-        // rather go full-bore and do a real CSRF check, but can't currently
-        // authenticate users on the file domain. This should blunt any
-        // attacks based on iframes, script tags, applet tags, etc., at least.
-        // Send the user to the "info" page if they're using some other method.
+      $is_public = !$viewer->isLoggedIn();
+      $is_post = $request->isHTTPPost();
 
+      // NOTE: Require POST to download files from the primary domain if the
+      // request includes credentials. The "Download File" links we generate
+      // in the web UI are forms which use POST to satisfy this requirement.
+
+      // The intent is to make attacks based on tags like "<iframe />" and
+      // "<script />" (which can issue GET requests, but can not easily issue
+      // POST requests) more difficult to execute.
+
+      // The best defense against these attacks is to use an alternate file
+      // domain, which is why we strongly recommend doing so.
+
+      $is_safe = ($is_alternate_domain || $is_lfs || $is_post || $is_public);
+      if (!$is_safe) {
         // This is marked as "external" because it is fully qualified.
         return id(new AphrontRedirectResponse())
           ->setIsExternal(true)
           ->setURI(PhabricatorEnv::getProductionURI($file->getBestURI()));
       }
+
       $response->setMimeType($file->getMimeType());
       $response->setDownload($file->getName());
     }
@@ -118,7 +123,7 @@ final class PhabricatorFileDataController extends PhabricatorFileController {
     // make this logic simpler and more consistent.
 
     // Beyond making the policy check itself more consistent, this also makes
-    // sure we're consitent about returning HTTP 404 on bad requests instead
+    // sure we're consistent about returning HTTP 404 on bad requests instead
     // of serving HTTP 200 with a login page, which can mislead some clients.
 
     $viewer = PhabricatorUser::getOmnipotentUser();
@@ -126,6 +131,7 @@ final class PhabricatorFileDataController extends PhabricatorFileController {
     $file = id(new PhabricatorFileQuery())
       ->setViewer($viewer)
       ->withPHIDs(array($this->phid))
+      ->withIsDeleted(false)
       ->executeOne();
 
     if (!$file) {

@@ -17,15 +17,12 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
   private $dateCreatedBefore;
   private $dateModifiedAfter;
   private $dateModifiedBefore;
-  private $subpriorityMin;
-  private $subpriorityMax;
   private $bridgedObjectPHIDs;
   private $hasOpenParents;
   private $hasOpenSubtasks;
   private $parentTaskIDs;
   private $subtaskIDs;
-
-  private $fullTextSearch   = '';
+  private $subtypes;
 
   private $status           = 'status-any';
   const STATUS_ANY          = 'status-any';
@@ -111,19 +108,8 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
     return $this;
   }
 
-  public function withSubpriorityBetween($min, $max) {
-    $this->subpriorityMin = $min;
-    $this->subpriorityMax = $max;
-    return $this;
-  }
-
   public function withSubscribers(array $subscribers) {
     $this->subscriberPHIDs = $subscribers;
-    return $this;
-  }
-
-  public function withFullTextSearch($fulltext_search) {
-    $this->fullTextSearch = $fulltext_search;
     return $this;
   }
 
@@ -208,6 +194,11 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
     return $this;
   }
 
+  public function withSubtypes(array $subtypes) {
+    $this->subtypes = $subtypes;
+    return $this;
+  }
+
   public function newResultObject() {
     return new ManiphestTask();
   }
@@ -249,6 +240,7 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
         break;
     }
 
+    $data = $this->didLoadRawRows($data);
     $tasks = $task_dao->loadAllFromArray($data);
 
     switch ($this->groupBy) {
@@ -330,7 +322,6 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
 
     $where[] = $this->buildStatusWhereClause($conn);
     $where[] = $this->buildOwnerWhereClause($conn);
-    $where[] = $this->buildFullTextWhereClause($conn);
 
     if ($this->taskIDs !== null) {
       $where[] = qsprintf(
@@ -402,25 +393,18 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
         $this->subpriorities);
     }
 
-    if ($this->subpriorityMin !== null) {
-      $where[] = qsprintf(
-        $conn,
-        'task.subpriority >= %f',
-        $this->subpriorityMin);
-    }
-
-    if ($this->subpriorityMax !== null) {
-      $where[] = qsprintf(
-        $conn,
-        'task.subpriority <= %f',
-        $this->subpriorityMax);
-    }
-
     if ($this->bridgedObjectPHIDs !== null) {
       $where[] = qsprintf(
         $conn,
         'task.bridgedObjectPHID IN (%Ls)',
         $this->bridgedObjectPHIDs);
+    }
+
+    if ($this->subtypes !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'task.subtype IN (%Ls)',
+        $this->subtypes);
     }
 
     return $where;
@@ -487,36 +471,6 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
     }
 
     return '('.implode(') OR (', $subclause).')';
-  }
-
-  private function buildFullTextWhereClause(AphrontDatabaseConnection $conn) {
-    if (!strlen($this->fullTextSearch)) {
-      return null;
-    }
-
-    // In doing a fulltext search, we first find all the PHIDs that match the
-    // fulltext search, and then use that to limit the rest of the search
-    $fulltext_query = id(new PhabricatorSavedQuery())
-      ->setEngineClassName('PhabricatorSearchApplicationSearchEngine')
-      ->setParameter('query', $this->fullTextSearch);
-
-    // NOTE: Setting this to something larger than 2^53 will raise errors in
-    // ElasticSearch, and billions of results won't fit in memory anyway.
-    $fulltext_query->setParameter('limit', 100000);
-    $fulltext_query->setParameter('types',
-      array(ManiphestTaskPHIDType::TYPECONST));
-
-    $engine = PhabricatorFulltextStorageEngine::loadEngine();
-    $fulltext_results = $engine->executeSearch($fulltext_query);
-
-    if (empty($fulltext_results)) {
-      $fulltext_results = array(null);
-    }
-
-    return qsprintf(
-      $conn,
-      'task.phid IN (%Ls)',
-      $fulltext_results);
   }
 
   protected function buildJoinClauseParts(AphrontDatabaseConnection $conn) {

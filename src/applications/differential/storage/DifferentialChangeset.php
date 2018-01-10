@@ -1,7 +1,10 @@
 <?php
 
-final class DifferentialChangeset extends DifferentialDAO
-  implements PhabricatorPolicyInterface {
+final class DifferentialChangeset
+  extends DifferentialDAO
+  implements
+    PhabricatorPolicyInterface,
+    PhabricatorDestructibleInterface {
 
   protected $diffID;
   protected $oldFile;
@@ -30,8 +33,8 @@ final class DifferentialChangeset extends DifferentialDAO
         'awayPaths'     => self::SERIALIZATION_JSON,
       ),
       self::CONFIG_COLUMN_SCHEMA => array(
-        'oldFile' => 'text255?',
-        'filename' => 'text255',
+        'oldFile' => 'bytes?',
+        'filename' => 'bytes',
         'changeType' => 'uint32',
         'fileType' => 'uint32',
         'addLines' => 'uint32',
@@ -75,6 +78,23 @@ final class DifferentialChangeset extends DifferentialDAO
     return $name;
   }
 
+  public function getOwnersFilename() {
+    // TODO: For Subversion, we should adjust these paths to be relative to
+    // the repository root where possible.
+
+    $path = $this->getFilename();
+
+    if (!isset($path[0])) {
+      return '/';
+    }
+
+    if ($path[0] != '/') {
+      $path = '/'.$path;
+    }
+
+    return $path;
+  }
+
   public function addUnsavedHunk(DifferentialHunk $hunk) {
     if ($this->hunks === self::ATTACHABLE) {
       $this->hunks = array();
@@ -97,13 +117,6 @@ final class DifferentialChangeset extends DifferentialDAO
 
   public function delete() {
     $this->openTransaction();
-
-      $legacy_hunks = id(new DifferentialLegacyHunk())->loadAllWhere(
-        'changesetID = %d',
-        $this->getID());
-      foreach ($legacy_hunks as $legacy_hunk) {
-        $legacy_hunk->delete();
-      }
 
       $modern_hunks = id(new DifferentialModernHunk())->loadAllWhere(
         'changesetID = %d',
@@ -160,7 +173,7 @@ final class DifferentialChangeset extends DifferentialDAO
   }
 
   public function getAnchorName() {
-    return substr(md5($this->getFilename()), 0, 8);
+    return 'change-'.PhabricatorHash::digestForIndex($this->getFilename());
   }
 
   public function getAbsoluteRepositoryPath(
@@ -225,5 +238,26 @@ final class DifferentialChangeset extends DifferentialDAO
   public function hasAutomaticCapability($capability, PhabricatorUser $viewer) {
     return $this->getDiff()->hasAutomaticCapability($capability, $viewer);
   }
+
+
+/* -(  PhabricatorDestructibleInterface  )----------------------------------- */
+
+
+  public function destroyObjectPermanently(
+    PhabricatorDestructionEngine $engine) {
+    $this->openTransaction();
+
+      $hunks = id(new DifferentialModernHunk())->loadAllWhere(
+        'changesetID = %d',
+        $this->getID());
+      foreach ($hunks as $hunk) {
+        $engine->destroyObject($hunk);
+      }
+
+      $this->delete();
+
+    $this->saveTransaction();
+  }
+
 
 }

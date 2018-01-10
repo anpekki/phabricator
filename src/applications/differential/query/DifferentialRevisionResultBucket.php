@@ -15,9 +15,8 @@ abstract class DifferentialRevisionResultBucket
 
     $objects = $this->getRevisionsNotAuthored($objects, $phids);
 
-    $status_review = ArcanistDifferentialRevisionStatus::NEEDS_REVIEW;
     foreach ($objects as $key => $object) {
-      if ($object->getStatus() != $status_review) {
+      if (!$object->isNeedsReview()) {
         continue;
       }
 
@@ -54,17 +53,27 @@ abstract class DifferentialRevisionResultBucket
   protected function hasReviewersWithStatus(
     DifferentialRevision $revision,
     array $phids,
-    array $statuses) {
+    array $statuses,
+    $include_voided = null) {
 
-    foreach ($revision->getReviewerStatus() as $reviewer) {
+    foreach ($revision->getReviewers() as $reviewer) {
       $reviewer_phid = $reviewer->getReviewerPHID();
       if (empty($phids[$reviewer_phid])) {
         continue;
       }
 
-      $status = $reviewer->getStatus();
+      $status = $reviewer->getReviewerStatus();
       if (empty($statuses[$status])) {
         continue;
+      }
+
+      if ($include_voided !== null) {
+        if ($status == DifferentialReviewerStatus::STATUS_ACCEPTED) {
+          $is_voided = (bool)$reviewer->getVoidedPHID();
+          if ($is_voided !== $include_voided) {
+            continue;
+          }
+        }
       }
 
       return true;

@@ -347,11 +347,11 @@ final class DiffusionURIEditor
                 continue;
               }
 
-              $io_type = $uri->getIoType();
+              $io_type = $uri->getEffectiveIOType();
 
               if ($io_type == PhabricatorRepositoryURI::IO_READWRITE) {
                 if ($no_readwrite) {
-                  $readwite_conflict = $uri;
+                  $readwrite_conflict = $uri;
                   break;
                 }
               }
@@ -506,6 +506,10 @@ final class DiffusionURIEditor
         ->setRepository($repository)
         ->synchronizeWorkingCopyAfterHostingChange();
     }
+
+    $repository->writeStatusMessage(
+      PhabricatorRepositoryStatusMessage::TYPE_NEEDS_UPDATE,
+      null);
 
     return $xactions;
   }

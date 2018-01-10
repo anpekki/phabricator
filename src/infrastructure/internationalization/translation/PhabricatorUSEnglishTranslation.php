@@ -730,7 +730,7 @@ final class PhabricatorUSEnglishTranslation
       '%s added %s reverting commit(s) for %s: %s.' => array(
         array(
           '%s added a reverting commit for %3$s: %4$s.',
-          '%s added reverting commitsi for %3$s: %4$s.',
+          '%s added reverting commits for %3$s: %4$s.',
         ),
       ),
 
@@ -1564,7 +1564,7 @@ final class PhabricatorUSEnglishTranslation
       '%s uninvited %s attendee(s): %s.' =>
         '%s uninvited: %3$s.',
 
-      '%s invited %s attendee(s): %s; uninvinted %s attendee(s): %s.' =>
+      '%s invited %s attendee(s): %s; uninvited %s attendee(s): %s.' =>
         '%s invited: %3$s; uninvited: %5$s.',
 
       '%s invited %s attendee(s) to %s: %s.' =>
@@ -1573,7 +1573,7 @@ final class PhabricatorUSEnglishTranslation
       '%s uninvited %s attendee(s) to %s: %s.' =>
         '%s removed invites for %3$s: %4$s.',
 
-      '%s updated the invite list for %s, invited %s: %s; uninvinted %s: %s.' =>
+      '%s updated the invite list for %s, invited %s: %s; uninvited %s: %s.' =>
         '%s updated the invite list for %s, invited: %4$s; uninvited: %6$s.',
 
       'Restart %s build(s)?' => array(
@@ -1585,6 +1585,57 @@ final class PhabricatorUSEnglishTranslation
         array(
           '%s is starting in one minute, at %3$s.',
           '%s is starting in %s minutes, at %s.',
+        ),
+      ),
+
+      '%s added %s auditor(s): %s.' => array(
+        array(
+          '%s added an auditor: %3$s.',
+          '%s added auditors: %3$s.',
+        ),
+      ),
+
+      '%s removed %s auditor(s): %s.' => array(
+        array(
+          '%s removed an auditor: %3$s.',
+          '%s removed auditors: %3$s.',
+        ),
+      ),
+
+      '%s edited %s auditor(s), removed %s: %s; added %s: %s.' => array(
+        array(
+          '%s edited auditors, removed: %4$s; added: %6$s.',
+        ),
+      ),
+
+      '%s accepted this revision as %s reviewer(s): %s.' =>
+        '%s accepted this revision as: %3$s.',
+
+      '%s added %s merchant manager(s): %s.' => array(
+        array(
+          '%s added a merchant manager: %3$s.',
+          '%s added merchant managers: %3$s.',
+        ),
+      ),
+
+      '%s removed %s merchant manager(s): %s.' => array(
+        array(
+          '%s removed a merchant manager: %3$s.',
+          '%s removed merchant managers: %3$s.',
+        ),
+      ),
+
+      '%s added %s account manager(s): %s.' => array(
+        array(
+          '%s added an account manager: %3$s.',
+          '%s added account managers: %3$s.',
+        ),
+      ),
+
+      '%s removed %s account manager(s): %s.' => array(
+        array(
+          '%s removed an account manager: %3$s.',
+          '%s removed account managers: %3$s.',
         ),
       ),
 

@@ -186,7 +186,7 @@ final class DiffusionSetPasswordSettingsPanel extends PhabricatorSettingsPanel {
         $form->appendRemarkupInstructions(
           pht(
             'Having trouble coming up with a good password? Try this '.
-            'artisinal password, hand made in small batches by our expert '.
+            'artisanal password, hand made in small batches by our expert '.
             'craftspeople: '.
             "\n\n".
             "`%s`",
@@ -233,6 +233,7 @@ final class DiffusionSetPasswordSettingsPanel extends PhabricatorSettingsPanel {
 
     $object_box = id(new PHUIObjectBoxView())
       ->setHeaderText($title)
+      ->setBackground(PHUIObjectBoxView::WHITE_CONFIG)
       ->setForm($form)
       ->setFormErrors($errors);
 
@@ -258,6 +259,7 @@ final class DiffusionSetPasswordSettingsPanel extends PhabricatorSettingsPanel {
 
     $remove_box = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Remove VCS Password'))
+      ->setBackground(PHUIObjectBoxView::WHITE_CONFIG)
       ->setForm($remove_form);
 
     $saved = null;

@@ -53,6 +53,10 @@ JX.behavior('aphlict-listen', function(config) {
       case 'notification.individual':
         JX.Stratcom.invoke('aphlict-notification-message', null, message.data);
         break;
+
+      case 'aphlict.reconnect':
+        JX.Stratcom.invoke('aphlict-reconnect', null, message.data);
+        break;
     }
   }
 
@@ -62,21 +66,27 @@ JX.behavior('aphlict-listen', function(config) {
       return;
     }
 
-    JX.Leader.broadcast(null, {
-      type: 'notification.individual',
-      data: response
-    });
+    JX.Leader.broadcast(
+      response.uniqueID,
+      {
+        type: 'notification.individual',
+        data: response
+      });
   }
 
   JX.Stratcom.listen('aphlict-notification-message', null, function(e) {
     JX.Stratcom.invoke('notification-panel-update', null, {});
     var response = e.getData();
 
+    if (!response.showAnyNotification) {
+      return;
+    }
+
     // Show the notification itself.
     new JX.Notification()
       .setContent(JX.$H(response.content))
-      .setDesktopReady(response.desktopReady)
       .setKey(response.primaryObjectPHID)
+      .setShowAsDesktopNotification(response.showDesktopNotification)
       .setTitle(response.title)
       .setBody(response.body)
       .setHref(response.href)
@@ -114,9 +124,16 @@ JX.behavior('aphlict-listen', function(config) {
     config.websocketURI,
     config.subscriptions);
 
-  client
-    .setHandler(onAphlictMessage)
-    .start();
+  var start_client = function() {
+    client
+      .setHandler(onAphlictMessage)
+      .start();
+  };
+
+  // Don't start the client until other behaviors have had a chance to
+  // initialize. In particular, we want to capture events into the log for
+  // the DarkConsole "Realtime" panel.
+  setTimeout(start_client, 0);
 
   JX.Stratcom.listen(
     'quicksand-redraw',

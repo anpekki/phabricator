@@ -34,11 +34,7 @@
   vertical-align: middle;
 }
 
-.device-phone .phui-header-col3 {
-  vertical-align: top;
-}
-
-body .phui-header-shell.phui-header-no-backgound {
+body .phui-header-shell.phui-header-no-background {
   background-color: transparent;
   border: none;
 }
@@ -91,6 +87,10 @@ body .phui-header-shell.phui-bleed-header
 
 .phui-header-view .phui-header-header a {
   color: {$darkbluetext};
+}
+
+.phui-box-blue-property .phui-header-view .phui-header-header a {
+  color: {$bluetext};
 }
 
 .device-desktop .phui-header-view .phui-header-header a:hover {
@@ -183,8 +183,8 @@ body .phui-header-shell.phui-bleed-header
   margin-right: 4px;
 }
 
-.phui-header-subheader .phui-tag-view .phui-icon-view,
-.phui-header-subheader .policy-header-callout .phui-icon-view {
+.phui-header-subheader .phui-tag-view span.phui-icon-view,
+.phui-header-subheader .policy-header-callout span.phui-icon-view {
   display: inline-block;
   margin: -2px 4px -2px 0;
   font-size: 15px;
@@ -303,14 +303,6 @@ body .phui-header-shell.phui-bleed-header
   text-decoration: underline;
 }
 
-.phui-header-subheader .phui-badge-flex-view {
-  display: inline;
-  margin-right: 4px;
-}
-
-.phui-header-subheader .phui-badge-flex-view:after {
-  display: inline;
-}
 
 /*** Profile Header ***********************************************************/
 
@@ -341,16 +333,15 @@ body .phui-header-shell.phui-bleed-header
 }
 
 .phui-profile-header.phui-header-shell .phui-header-header {
-  font-family: 'Aleo', {$fontfamily};
   font-size: 24px;
-  color: #000;
+  color: {$blacktext};
 }
 
-.phui-profile-header .phui-header-col3 {
-  vertical-align: top;
+.phui-profile-header.phui-header-shell .phui-header-header a {
+  color: {$blacktext};
 }
 
-.phui-header-view .phui-tag-shade-indigo a {
+.phui-header-view .phui-tag-indigo a {
   color: {$sh-indigotext};
 }
 

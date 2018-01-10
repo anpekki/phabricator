@@ -20,7 +20,7 @@ final class DiffusionCommitRevisionReviewersHeraldField
       return array();
     }
 
-    return $revision->getReviewers();
+    return $revision->getReviewerPHIDs();
   }
 
   protected function getHeraldFieldStandardType() {
@@ -28,7 +28,7 @@ final class DiffusionCommitRevisionReviewersHeraldField
   }
 
   protected function getDatasource() {
-    return new PhabricatorProjectOrUserDatasource();
+    return new DifferentialReviewerDatasource();
   }
 
 }

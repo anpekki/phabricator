@@ -15,6 +15,7 @@ final class PhabricatorCalendarEvent extends PhabricatorCalendarDAO
     PhabricatorFlaggableInterface,
     PhabricatorSpacesInterface,
     PhabricatorFulltextInterface,
+    PhabricatorFerretInterface,
     PhabricatorConduitResultInterface {
 
   protected $name;
@@ -389,6 +390,10 @@ final class PhabricatorCalendarEvent extends PhabricatorCalendarDAO
     $epoch = $this->getStartDateTimeEpoch();
     $window = phutil_units('15 minutes in seconds');
     return ($epoch - $window);
+  }
+
+  public function getEndDateTimeEpochForCache() {
+    return $this->getEndDateTimeEpoch();
   }
 
   protected function getConfiguration() {
@@ -1182,9 +1187,8 @@ final class PhabricatorCalendarEvent extends PhabricatorCalendarDAO
    * @task markup
    */
   public function getMarkupFieldKey($field) {
-    $hash = PhabricatorHash::digest($this->getMarkupText($field));
-    $id = $this->getID();
-    return "calendar:T{$id}:{$field}:{$hash}";
+    $content = $this->getMarkupText($field);
+    return PhabricatorMarkupEngine::digestRemarkupContent($this, $content);
   }
 
 
@@ -1343,7 +1347,21 @@ final class PhabricatorCalendarEvent extends PhabricatorCalendarDAO
     PhabricatorDestructionEngine $engine) {
 
     $this->openTransaction();
-    $this->delete();
+      $invitees = id(new PhabricatorCalendarEventInvitee())->loadAllWhere(
+        'eventPHID = %s',
+        $this->getPHID());
+      foreach ($invitees as $invitee) {
+        $invitee->delete();
+      }
+
+      $notifications = id(new PhabricatorCalendarNotification())->loadAllWhere(
+        'eventPHID = %s',
+        $this->getPHID());
+      foreach ($notifications as $notification) {
+        $notification->delete();
+      }
+
+      $this->delete();
     $this->saveTransaction();
   }
 
@@ -1360,6 +1378,14 @@ final class PhabricatorCalendarEvent extends PhabricatorCalendarDAO
 
   public function newFulltextEngine() {
     return new PhabricatorCalendarEventFulltextEngine();
+  }
+
+
+/* -(  PhabricatorFerretInterface  )----------------------------------------- */
+
+
+  public function newFerretEngine() {
+    return new PhabricatorCalendarEventFerretEngine();
   }
 
 

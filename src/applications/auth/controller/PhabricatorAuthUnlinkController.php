@@ -61,7 +61,7 @@ final class PhabricatorAuthUnlinkController
       return id(new AphrontRedirectResponse())->setURI($this->getDoneURI());
     }
 
-    return $this->renderConfirmDialog($account);
+    return $this->renderConfirmDialog();
   }
 
   private function getDoneURI() {
@@ -104,7 +104,7 @@ final class PhabricatorAuthUnlinkController
         pht(
           'You can not unlink this account because you have no other '.
           'valid login accounts. If you removed it, you would be unable '.
-          'to login. Add another authentication method before removing '.
+          'to log in. Add another authentication method before removing '.
           'this one.'))
       ->addCancelButton($this->getDoneURI());
 

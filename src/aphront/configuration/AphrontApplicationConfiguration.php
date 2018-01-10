@@ -59,6 +59,11 @@ abstract class AphrontApplicationConfiguration extends Phobject {
    * @phutil-external-symbol class PhabricatorStartup
    */
   public static function runHTTPRequest(AphrontHTTPSink $sink) {
+    if (isset($_SERVER['HTTP_X_PHABRICATOR_SELFCHECK'])) {
+      $response = self::newSelfCheckResponse();
+      return self::writeResponse($sink, $response);
+    }
+
     PhabricatorStartup::beginStartupPhase('multimeter');
     $multimeter = MultimeterControl::newInstance();
     $multimeter->setEventContext('<http-init>');
@@ -199,21 +204,10 @@ abstract class AphrontApplicationConfiguration extends Phobject {
 
     DarkConsoleXHProfPluginAPI::saveProfilerSample($access_log);
 
-    // Add points to the rate limits for this request.
-    if (isset($_SERVER['REMOTE_ADDR'])) {
-      $user_ip = $_SERVER['REMOTE_ADDR'];
-
-      // The base score for a request allows users to make 30 requests per
-      // minute.
-      $score = (1000 / 30);
-
-      // If the user was logged in, let them make more requests.
-      if ($request->getUser() && $request->getUser()->getPHID()) {
-        $score = $score / 5;
-      }
-
-      PhabricatorStartup::addRateLimitScore($user_ip, $score);
-    }
+    PhabricatorStartup::disconnectRateLimits(
+      array(
+        'viewer' => $request->getUser(),
+      ));
 
     if ($processing_exception) {
       throw $processing_exception;
@@ -266,7 +260,10 @@ abstract class AphrontApplicationConfiguration extends Phobject {
       }
     } catch (Exception $ex) {
       $original_exception = $ex;
-      $response = $this->handleException($ex);
+      $response = $this->handleThrowable($ex);
+    } catch (Throwable $ex) {
+      $original_exception = $ex;
+      $response = $this->handleThrowable($ex);
     }
 
     try {
@@ -298,18 +295,7 @@ abstract class AphrontApplicationConfiguration extends Phobject {
       phlog($unexpected_output);
 
       if ($response instanceof AphrontWebpageResponse) {
-        echo phutil_tag(
-          'div',
-          array(
-            'style' =>
-              'background: #eeddff;'.
-              'white-space: pre-wrap;'.
-              'z-index: 200000;'.
-              'position: relative;'.
-              'padding: 8px;'.
-              'font-family: monospace',
-          ),
-          $unexpected_output);
+        $response->setUnexpectedOutput($unexpected_output);
       }
     }
 
@@ -670,25 +656,56 @@ abstract class AphrontApplicationConfiguration extends Phobject {
    * This method delegates exception handling to available subclasses of
    * @{class:AphrontRequestExceptionHandler}.
    *
-   * @param Exception Exception which needs to be handled.
+   * @param Throwable Exception which needs to be handled.
    * @return wild Response or response producer, or null if no available
    *   handler can produce a response.
    * @task exception
    */
-  private function handleException(Exception $ex) {
+  private function handleThrowable($throwable) {
     $handlers = AphrontRequestExceptionHandler::getAllHandlers();
 
     $request = $this->getRequest();
     foreach ($handlers as $handler) {
-      if ($handler->canHandleRequestException($request, $ex)) {
-        $response = $handler->handleRequestException($request, $ex);
+      if ($handler->canHandleRequestThrowable($request, $throwable)) {
+        $response = $handler->handleRequestThrowable($request, $throwable);
         $this->validateErrorHandlerResponse($handler, $response);
         return $response;
       }
     }
 
-    throw $ex;
+    throw $throwable;
   }
 
+  private static function newSelfCheckResponse() {
+    $path = idx($_REQUEST, '__path__', '');
+    $query = idx($_SERVER, 'QUERY_STRING', '');
+
+    $pairs = id(new PhutilQueryStringParser())
+      ->parseQueryStringToPairList($query);
+
+    $params = array();
+    foreach ($pairs as $v) {
+      $params[] = array(
+        'name' => $v[0],
+        'value' => $v[1],
+      );
+    }
+
+    $result = array(
+      'path' => $path,
+      'params' => $params,
+      'user' => idx($_SERVER, 'PHP_AUTH_USER'),
+      'pass' => idx($_SERVER, 'PHP_AUTH_PW'),
+
+      // This just makes sure that the response compresses well, so reasonable
+      // algorithms should want to gzip or deflate it.
+      'filler' => str_repeat('Q', 1024 * 16),
+    );
+
+
+    return id(new AphrontJSONResponse())
+      ->setAddJSONShield(false)
+      ->setContent($result);
+  }
 
 }

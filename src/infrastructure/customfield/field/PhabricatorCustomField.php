@@ -33,6 +33,8 @@ abstract class PhabricatorCustomField extends Phobject {
   const ROLE_GLOBALSEARCH             = 'GlobalSearch';
   const ROLE_CONDUIT                  = 'conduit';
   const ROLE_HERALD                   = 'herald';
+  const ROLE_EDITENGINE = 'EditEngine';
+  const ROLE_HERALDACTION = 'herald.action';
 
 
 /* -(  Building Applications with Custom Fields  )--------------------------- */
@@ -292,6 +294,11 @@ abstract class PhabricatorCustomField extends Phobject {
         return $this->shouldAppearInTransactionMail();
       case self::ROLE_HERALD:
         return $this->shouldAppearInHerald();
+      case self::ROLE_HERALDACTION:
+        return $this->shouldAppearInHeraldActions();
+      case self::ROLE_EDITENGINE:
+        return $this->shouldAppearInEditView() ||
+               $this->shouldAppearInEditEngine();
       case self::ROLE_DEFAULT:
         return true;
       default:
@@ -1091,7 +1098,7 @@ abstract class PhabricatorCustomField extends Phobject {
 
 
   public function getEditEngineFields(PhabricatorEditEngine $engine) {
-    $field = $this->newStandardEditField($engine);
+    $field = $this->newStandardEditField();
 
     return array(
       $field,
@@ -1120,12 +1127,19 @@ abstract class PhabricatorCustomField extends Phobject {
       return $this->proxy->newStandardEditField();
     }
 
+    if (!$this->shouldAppearInEditView()) {
+      $conduit_only = true;
+    } else {
+      $conduit_only = false;
+    }
+
     return $this->newEditField()
       ->setKey($this->getFieldKey())
       ->setEditTypeKey($this->getModernFieldKey())
       ->setLabel($this->getFieldName())
       ->setDescription($this->getFieldDescription())
       ->setTransactionType($this->getApplicationTransactionType())
+      ->setIsConduitOnly($conduit_only)
       ->setValue($this->getNewValueForApplicationTransactions());
   }
 
@@ -1142,6 +1156,16 @@ abstract class PhabricatorCustomField extends Phobject {
   public function shouldAppearInEditView() {
     if ($this->proxy) {
       return $this->proxy->shouldAppearInEditView();
+    }
+    return false;
+  }
+
+  /**
+   * @task edit
+   */
+  public function shouldAppearInEditEngine() {
+    if ($this->proxy) {
+      return $this->proxy->shouldAppearInEditEngine();
     }
     return false;
   }
@@ -1454,5 +1478,57 @@ abstract class PhabricatorCustomField extends Phobject {
     return null;
   }
 
+
+  public function shouldAppearInHeraldActions() {
+    if ($this->proxy) {
+      return $this->proxy->shouldAppearInHeraldActions();
+    }
+    return false;
+  }
+
+
+  public function getHeraldActionName() {
+    if ($this->proxy) {
+      return $this->proxy->getHeraldActionName();
+    }
+
+    return null;
+  }
+
+
+  public function getHeraldActionStandardType() {
+    if ($this->proxy) {
+      return $this->proxy->getHeraldActionStandardType();
+    }
+
+    return null;
+  }
+
+
+  public function getHeraldActionDescription($value) {
+    if ($this->proxy) {
+      return $this->proxy->getHeraldActionDescription($value);
+    }
+
+    return null;
+  }
+
+
+  public function getHeraldActionEffectDescription($value) {
+    if ($this->proxy) {
+      return $this->proxy->getHeraldActionEffectDescription($value);
+    }
+
+    return null;
+  }
+
+
+  public function getHeraldActionDatasource() {
+    if ($this->proxy) {
+      return $this->proxy->getHeraldActionDatasource();
+    }
+
+    return null;
+  }
 
 }
