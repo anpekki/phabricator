@@ -1,0 +1,14 @@
+[Unit]
+Description=Phabricator Daemons
+Requires=mariadb.service
+After=mariadb.service
+
+[Service]
+Type=forking
+ExecStart=/opt/phacility/phabricator/bin/phd start
+ExecStop=/opt/phacility/phabricator/bin/phd stop
+User=phabricator
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

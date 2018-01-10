@@ -6,6 +6,8 @@ Name:           phabricator
 Version:        %{version}
 Release:        %{release}
 Summary:        collection of web applications to help build software
+BuildArch:      noarch
+AutoReq:        no
 
 Group:          Web
 License:        Apache 2.0
@@ -15,15 +17,19 @@ Source1:        https://github.com/phacility/arcanist.git
 Source2:        https://github.com/vinzent/phabricator.git
 
 BuildRequires:  git
-BuildArch:      noarch
-Requires(pre):  shadow-utils
-Requires(post): chkconfig
-Requires(preun): chkconfig initscripts
+Requires:       shadow-utils
 Requires:       git php php-cli php-mysql php-process php-devel php-gd python-pygments
 Requires:       php-pecl-apc php-pecl-json php-mbstring sudo
 Requires:       phabricator-arcanist = %{version}-%{release}
 Requires:       phabricator-libphutil = %{version}-%{release}
-AutoReq:        no
+
+%if 0%{?rhel} <= 6
+Requires: chkconfig initscripts mysql-server
+%else
+BuildRequires:  systemd
+Requires:       mariadb-server
+%{?systemd_requires}
+%endif
 
 %description
 Phabricator is an open source collection of web applications which help
@@ -62,14 +68,14 @@ if [[ ! -e libphutil ]]
 then
   git clone https://github.com/phacility/libphutil.git
 else
-  (cd libphutil && git pull --rebase)
+  (cd libphutil && git fetch --prune && git clean -fd && git reset --hard)
 fi
 
 if [[ ! -e arcanist ]]
 then
   git clone https://github.com/phacility/arcanist.git
 else
-  (cd arcanist && git pull --rebase)
+  (cd arcanist && git fetch --prune && git clean -fd && git reset --hard)
 fi
 
 
@@ -77,7 +83,7 @@ if [[ ! -e phabricator ]]
 then
   git clone https://github.com/vinzent/phabricator.git
 else
-  (cd phabricator && git pull --rebase)
+  (cd phabricator && git fetch --prune && git clean -fd && git reset --hard)
 fi
 
 
@@ -98,9 +104,18 @@ mkdir -p ${RPM_BUILD_ROOT}/var/lib/phabricator
 mkdir ${RPM_BUILD_ROOT}/var/lib/phabricator/files
 mkdir ${RPM_BUILD_ROOT}/var/lib/phabricator/repo
 
+%if 0%{?rhel} <= 6
 mkdir -p ${RPM_BUILD_ROOT}%{_initddir}
 cp phabricator/resources/rhel/phabricator.init \
   ${RPM_BUILD_ROOT}%{_initddir}/phabricator
+%endif
+
+%if 0%{?rhel} >= 7
+mkdir -p ${RPM_BUILD_ROOT}%{_unitdir}
+cp phabricator/resources/rhel/phabricator.service \
+  ${RPM_BUILD_ROOT}%{_unitdir}/phabricator.service
+%endif
+
 
 mkdir -p ${RPM_BUILD_ROOT}/var/log/phabricator
 
@@ -121,6 +136,12 @@ getent passwd phabricator >/dev/null || \
     -c "Daemon user for Phabricator" phabricator
 
 %post
+%if 0%{?rhel} <= 6
+/sbin/chkconfig --add phabricator
+%else
+%systemd_user_post phabricator.service
+%endif
+
 CFG=/opt/phacility/phabricator/bin/config
 if ! [ -e /opt/phacility/phabricator/conf/local/local.json ]; then
   $CFG set repository.default-local-path /var/lib/phabricator/repo
@@ -135,9 +156,9 @@ if ! [ -e /opt/phacility/phabricator/conf/local/local.json ]; then
   $CFG set phd.pid-directory /var/run/phabricator
   $CFG set diffusion.allow-http-auth true
   $CFG set phabricator.csrf-key \
-    $(dd if=/dev/urandom bs=128 count=1 2>/dev/null |  base64 | egrep -o '[a-zA-Z0-9]' | head -30 | tr -d '\n')
+    $(dd if=/dev/urandom bs=128 count=1 2>/dev/null |  base64 | grep -Eo '[a-zA-Z0-9]' | head -30 | tr -d '\n')
   $CFG set phabricator.mail-key \
-    $(dd if=/dev/urandom bs=128 count=1 2>/dev/null |  base64 | egrep -o '[a-zA-Z0-9]' | head -30 | tr -d '\n')
+    $(dd if=/dev/urandom bs=128 count=1 2>/dev/null |  base64 | grep -Eo '[a-zA-Z0-9]' | head -30 | tr -d '\n')
 fi
 
 # Httpd needs access to the repo folder
@@ -145,20 +166,27 @@ if ! groupmems -g phabricator -l | grep -q apache; then
   groupmems -g phabricator -a apache
 fi
 
-/sbin/chkconfig --add phabricator
 
 %preun
+%if 0%{?rhel} <= 6
 if [ $1 -eq 0 ] ; then
     /sbin/service phabricator stop >/dev/null 2>&1
     /sbin/chkconfig --del phabricator
 fi
-
-
+%else
+%systemd_user_preun phabricator.service
+%endif
 
 %files
 %defattr(-,root,root,-)
 /opt/phacility/phabricator
+
+%if 0%{?rhel} <= 6
 %attr(0755,-,-) %{_initddir}/phabricator
+%else
+%{_unitdir}/phabricator.service
+%endif
+
 %attr(0440,-,-) /etc/sudoers.d/phabricator
 %dir %attr(0750, phabricator, phabricator)/var/lib/phabricator
 %dir %attr(2750, phabricator, phabricator) /var/lib/phabricator/repo
